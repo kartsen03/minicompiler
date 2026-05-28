@@ -1,0 +1,28 @@
+# Build artifacts
+build/
+*.o
+*.so
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+
+# Editors / IDEs
+.vscode/
+.idea/
+
+# IR visualizations
+*.dot
+docs/ir_diagrams/*.png
+
+# Profiling output
+perf.data*
+callgrind.out*
+gmon.out
+
+# OS junk
+.DS_Store
+Thumbs.db
