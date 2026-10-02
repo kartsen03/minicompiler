@@ -1,0 +1,35 @@
+digraph "gelu_chain" {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=13, labelloc=t, label="gelu_chain: after pass 3 (dne)\n14 nodes, 9 compute (9 elementwise ops, 0 matmul)"];
+  node [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled"];
+  edge [color="#4b5563", arrowsize=0.7];
+  n0 [label="x\ninput\nf32[1024,4096]", shape=ellipse, style=filled, fillcolor="#dbeafe"];
+  n1 [label="half\nconst 0.5\nf32[]", style=filled, fillcolor="#e5e7eb"];
+  n2 [label="one\nconst 1\nf32[]", style=filled, fillcolor="#e5e7eb"];
+  n3 [label="coef\nconst 0.044715\nf32[]", style=filled, fillcolor="#e5e7eb"];
+  n4 [label="c\nconst 0.797885\nf32[]", style=filled, fillcolor="#e5e7eb"];
+  n5 [label="x2\nmul\nf32[1024,4096]", fillcolor="#fef3c7"];
+  n6 [label="x3\nmul\nf32[1024,4096]", fillcolor="#fef3c7"];
+  n7 [label="t\nmul\nf32[1024,4096]", fillcolor="#fef3c7"];
+  n8 [label="inner\nadd\nf32[1024,4096]", fillcolor="#fef3c7"];
+  n9 [label="u\nmul\nf32[1024,4096]", fillcolor="#fef3c7"];
+  n10 [label="th\ntanh\nf32[1024,4096]", fillcolor="#fef3c7"];
+  n11 [label="p\nadd\nf32[1024,4096]", fillcolor="#fef3c7"];
+  n12 [label="hx\nmul\nf32[1024,4096]", fillcolor="#fef3c7"];
+  n13 [label="y\nmul\nf32[1024,4096]", fillcolor="#fef3c7", peripheries=2, penwidth=1.5];
+  n0 -> n5;
+  n5 -> n6;
+  n0 -> n6;
+  n6 -> n7;
+  n3 -> n7;
+  n0 -> n8;
+  n7 -> n8;
+  n8 -> n9;
+  n4 -> n9;
+  n9 -> n10;
+  n10 -> n11;
+  n2 -> n11;
+  n0 -> n12;
+  n1 -> n12;
+  n12 -> n13;
+  n11 -> n13;
+}

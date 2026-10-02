@@ -1,0 +1,31 @@
+digraph "mlp_block" {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=13, labelloc=t, label="mlp_block: after pass 5 (dne)\n13 nodes, 4 compute (16 elementwise ops, 2 matmul)"];
+  node [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled"];
+  edge [color="#4b5563", arrowsize=0.7];
+  n0 [label="x\ninput\nf32[128,512]", shape=ellipse, style=filled, fillcolor="#dbeafe"];
+  n1 [label="w1\nconst <1048576 values>\nf32[512,2048]", style=filled, fillcolor="#e5e7eb"];
+  n2 [label="b1\nconst <2048 values>\nf32[2048]", style=filled, fillcolor="#e5e7eb"];
+  n3 [label="mean\nconst <2048 values>\nf32[2048]", style=filled, fillcolor="#e5e7eb"];
+  n4 [label="gamma\nconst <2048 values>\nf32[2048]", style=filled, fillcolor="#e5e7eb"];
+  n5 [label="beta\nconst <2048 values>\nf32[2048]", style=filled, fillcolor="#e5e7eb"];
+  n6 [label="w2\nconst <1048576 values>\nf32[2048,512]", style=filled, fillcolor="#e5e7eb"];
+  n7 [label="b2\nconst <512 values>\nf32[512]", style=filled, fillcolor="#e5e7eb"];
+  n8 [label="h\nmatmul\nf32[128,2048]", fillcolor="#fed7aa"];
+  n9 [label="std\nconst <2048 values>\nf32[2048]", style=filled, fillcolor="#e5e7eb"];
+  n10 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="1"><TR><TD><B>act</B></TD></TR><TR><TD>fused: 14 ops</TD></TR><TR><TD>f32[128,2048]</TD></TR><TR><TD ALIGN="LEFT"><FONT FACE="Courier" POINT-SIZE="9">r0 = load h<BR ALIGN="LEFT"/>r1 = load b1<BR ALIGN="LEFT"/>r2 = add r0, r1<BR ALIGN="LEFT"/>r3 = load mean<BR ALIGN="LEFT"/>r4 = sub r2, r3<BR ALIGN="LEFT"/>r5 = load std<BR ALIGN="LEFT"/>r6 = div r4, r5<BR ALIGN="LEFT"/>r7 = load gamma<BR ALIGN="LEFT"/>r8 = mul r6, r7<BR ALIGN="LEFT"/>r9 = load beta<BR ALIGN="LEFT"/>r10 = add r8, r9<BR ALIGN="LEFT"/>r11 = mul r10, r10<BR ALIGN="LEFT"/>r12 = mul r11, r10<BR ALIGN="LEFT"/>r13 = 0.044715<BR ALIGN="LEFT"/>r14 = mul r12, r13<BR ALIGN="LEFT"/>r15 = add r10, r14<BR ALIGN="LEFT"/>r16 = 0.797885<BR ALIGN="LEFT"/>r17 = mul r15, r16<BR ALIGN="LEFT"/>r18 = tanh r17<BR ALIGN="LEFT"/>r19 = 1<BR ALIGN="LEFT"/>r20 = add r18, r19<BR ALIGN="LEFT"/>r21 = 0.5<BR ALIGN="LEFT"/>r22 = mul r10, r21<BR ALIGN="LEFT"/>r23 = mul r22, r20<BR ALIGN="LEFT"/></FONT></TD></TR></TABLE>>, color="#16a34a", fillcolor="#dcfce7"];
+  n11 [label="o\nmatmul\nf32[128,512]", fillcolor="#fed7aa"];
+  n12 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="1"><TR><TD><B>y</B></TD></TR><TR><TD>fused: 2 ops</TD></TR><TR><TD>f32[128,512]</TD></TR><TR><TD ALIGN="LEFT"><FONT FACE="Courier" POINT-SIZE="9">r0 = load o<BR ALIGN="LEFT"/>r1 = load b2<BR ALIGN="LEFT"/>r2 = add r0, r1<BR ALIGN="LEFT"/>r3 = load x<BR ALIGN="LEFT"/>r4 = add r2, r3<BR ALIGN="LEFT"/></FONT></TD></TR></TABLE>>, color="#16a34a", fillcolor="#dcfce7", peripheries=2, penwidth=1.5];
+  n0 -> n8;
+  n1 -> n8;
+  n8 -> n10;
+  n2 -> n10;
+  n3 -> n10;
+  n9 -> n10;
+  n4 -> n10;
+  n5 -> n10;
+  n10 -> n11;
+  n6 -> n11;
+  n11 -> n12;
+  n7 -> n12;
+  n0 -> n12;
+}

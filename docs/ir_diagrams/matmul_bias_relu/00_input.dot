@@ -1,0 +1,16 @@
+digraph "matmul_bias_relu" {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=13, labelloc=t, label="matmul_bias_relu: input\n6 nodes, 3 compute (2 elementwise ops, 1 matmul)"];
+  node [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled"];
+  edge [color="#4b5563", arrowsize=0.7];
+  n0 [label="x\ninput\nf32[256,1024]", shape=ellipse, style=filled, fillcolor="#dbeafe"];
+  n1 [label="w\nconst <1048576 values>\nf32[1024,1024]", style=filled, fillcolor="#e5e7eb"];
+  n2 [label="b\nconst <1024 values>\nf32[1024]", style=filled, fillcolor="#e5e7eb"];
+  n3 [label="h\nmatmul\nf32[256,1024]", fillcolor="#fed7aa"];
+  n4 [label="hb\nadd\nf32[256,1024]", fillcolor="#fef3c7"];
+  n5 [label="y\nrelu\nf32[256,1024]", fillcolor="#fef3c7", peripheries=2, penwidth=1.5];
+  n0 -> n3;
+  n1 -> n3;
+  n3 -> n4;
+  n2 -> n4;
+  n4 -> n5;
+}

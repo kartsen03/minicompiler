@@ -1,0 +1,8 @@
+digraph "gelu_chain" {
+  graph [rankdir=TB, fontname="Helvetica", fontsize=13, labelloc=t, label="gelu_chain: after pass 5 (dne)\n2 nodes, 1 compute (9 elementwise ops, 0 matmul)"];
+  node [fontname="Helvetica", fontsize=10, shape=box, style="rounded,filled"];
+  edge [color="#4b5563", arrowsize=0.7];
+  n0 [label="x\ninput\nf32[1024,4096]", shape=ellipse, style=filled, fillcolor="#dbeafe"];
+  n1 [label=<<TABLE BORDER="0" CELLBORDER="0" CELLSPACING="0" CELLPADDING="1"><TR><TD><B>y</B></TD></TR><TR><TD>fused: 9 ops</TD></TR><TR><TD>f32[1024,4096]</TD></TR><TR><TD ALIGN="LEFT"><FONT FACE="Courier" POINT-SIZE="9">r0 = load x<BR ALIGN="LEFT"/>r1 = mul r0, r0<BR ALIGN="LEFT"/>r2 = mul r1, r0<BR ALIGN="LEFT"/>r3 = 0.044715<BR ALIGN="LEFT"/>r4 = mul r2, r3<BR ALIGN="LEFT"/>r5 = add r0, r4<BR ALIGN="LEFT"/>r6 = 0.797885<BR ALIGN="LEFT"/>r7 = mul r5, r6<BR ALIGN="LEFT"/>r8 = tanh r7<BR ALIGN="LEFT"/>r9 = 1<BR ALIGN="LEFT"/>r10 = add r8, r9<BR ALIGN="LEFT"/>r11 = 0.5<BR ALIGN="LEFT"/>r12 = mul r0, r11<BR ALIGN="LEFT"/>r13 = mul r12, r10<BR ALIGN="LEFT"/></FONT></TD></TR></TABLE>>, color="#16a34a", fillcolor="#dcfce7", peripheries=2, penwidth=1.5];
+  n0 -> n1;
+}
