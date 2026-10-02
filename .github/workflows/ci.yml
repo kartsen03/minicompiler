@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  linux:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "GCC Release", cc: gcc, cxx: g++, build_type: Release, sanitize: "OFF" }
+          - { name: "Clang Release", cc: clang, cxx: clang++, build_type: Release, sanitize: "OFF" }
+          - { name: "GCC Debug + ASan/UBSan", cc: gcc, cxx: g++, build_type: Debug, sanitize: "ON" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libeigen3-dev libgtest-dev ninja-build graphviz
+
+      - name: Configure
+        env:
+          CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
+        run: >
+          cmake -S . -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+          -DMINICOMPILER_SANITIZE=${{ matrix.sanitize }}
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Test
+        run: ctest --test-dir build --output-on-failure
+
+      - name: Toolchain versions
+        if: always()
+        run: |
+          ${{ matrix.cxx }} --version | head -1
+          cmake --version | head -1
+          grep -m1 PRETTY_NAME /etc/os-release
