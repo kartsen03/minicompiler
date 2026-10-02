@@ -126,7 +126,8 @@ TEST(OperatorFusion, FusesADiamondAndComputesTheSharedValueOnce) {
 	b.output(b.add(e, n, "y"));
 	Graph g = std::move(b).build().value();
 	EXPECT_EQ(group_names(g), (std::vector<std::vector<std::string>>{{"a", "e", "n", "y"}}));
-	const FusedProgram& p = *fuse_elementwise(g).value().node(1).fused;
+	const Graph fused = fuse_elementwise(g).value();
+	const FusedProgram& p = *fused.node(1).fused;
 	EXPECT_EQ(p.num_ops(), 4u);  // tanh appears once even though two ops read it
 }
 
