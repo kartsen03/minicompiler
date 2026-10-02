@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <ostream>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace minicompiler {
@@ -16,7 +17,7 @@ enum class DType : std::uint8_t {
 	Bool,
 };
 
-inline std::size_t DType_size_bytes(DType dt) {
+inline std::size_t dtype_size_bytes(DType dt) {
 	switch (dt) {
 		case DType::Float32: return 4;
 		case DType::Float64: return 8;
@@ -27,7 +28,7 @@ inline std::size_t DType_size_bytes(DType dt) {
 	return 0;
 }
 
-inline const char* DType_name(DType dt) {
+inline const char* dtype_name(DType dt) {
 	switch (dt) {
 		case DType::Float32: return "f32";
 		case DType::Float64: return "f64";
@@ -40,45 +41,51 @@ inline const char* DType_name(DType dt) {
 
 using Shape = std::vector<std::int64_t>;
 
-struct Tensor {
+inline std::size_t num_elements(const Shape& shape) {
+	std::size_t n = 1;
+	for (std::int64_t d : shape) {
+		n *= static_cast<std::size_t>(d);
+	}
+	return n;
+}
+
+// The static type of a value in the IR: its shape and element type. It holds
+// no data; constant payloads live on Constant nodes and runtime buffers belong
+// to the backends.
+struct TensorType {
 	Shape shape;
 	DType dtype = DType::Float32;
 
-	Tensor() = default;
-	Tensor(Shape s, DType d) : shape(std::move(s)), dtype(d) {}
+	TensorType() = default;
+	explicit TensorType(Shape s, DType d = DType::Float32) : shape(std::move(s)), dtype(d) {}
 
 	std::size_t rank() const { return shape.size(); }
+	std::size_t num_elements() const { return minicompiler::num_elements(shape); }
+	std::size_t size_bytes() const { return num_elements() * dtype_size_bytes(dtype); }
 
-	std::size_t num_elements() const {
-		std::size_t n = 1;
-		for (std::int64_t d : shape) {
-			n *= static_cast<std::size_t>(d);
-		}
-		return n;
-	}
-
-	std::size_t size_bytes() const {
-		return num_elements() * DType_size_bytes(dtype);
-	}
-
-	bool operator==(const Tensor& other) const {
+	bool operator==(const TensorType& other) const {
 		return shape == other.shape && dtype == other.dtype;
 	}
-	bool operator!=(const Tensor& other) const { return !(*this == other); }
+	bool operator!=(const TensorType& other) const { return !(*this == other); }
 };
 
-inline std::ostream& operator<<(std::ostream& os, const Tensor& t) {
-	os << DType_name(t.dtype) << "[";
-	for (std::size_t i=0; i<t.shape.size(); ++i) {
-		if (i>0) os << ",";
-		os << t.shape[i];
+// "[4,8]"; a scalar is "[]".
+inline std::string to_string(const Shape& shape) {
+	std::string s = "[";
+	for (std::size_t i=0; i<shape.size(); ++i) {
+		if (i>0) s += ",";
+		s += std::to_string(shape[i]);
 	}
-	os << "]";
-	return os;
+	return s + "]";
 }
 
-inline Tensor make_tensor(Shape s, DType d = DType::Float32) {
-	return Tensor(std::move(s), d);
+// "f32[4,8]"
+inline std::string to_string(const TensorType& t) {
+	return dtype_name(t.dtype) + to_string(t.shape);
+}
+
+inline std::ostream& operator<<(std::ostream& os, const TensorType& t) {
+	return os << to_string(t);
 }
 
 }
