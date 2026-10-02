@@ -5,6 +5,7 @@ add_library(minicompiler STATIC
     ops.cpp
     parser.cpp
     random.cpp
+    viz/dot_export.cpp
 )
 
 target_include_directories(minicompiler PUBLIC
