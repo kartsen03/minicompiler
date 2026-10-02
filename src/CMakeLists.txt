@@ -3,6 +3,8 @@ add_library(minicompiler STATIC
     graph.cpp
     graph_builder.cpp
     ops.cpp
+    parser.cpp
+    random.cpp
 )
 
 target_include_directories(minicompiler PUBLIC
