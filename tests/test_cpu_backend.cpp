@@ -201,6 +201,21 @@ TEST(CpuBackend, ReusesBuffersAcrossRuns) {
 	EXPECT_LE(exe->intermediate_bytes(), 1u << 20);
 }
 
+TEST(CpuBackend, AnOutputCanFeedLaterNodes) {
+	// y1 is written into the caller's tensor and then read by y2.
+	GraphBuilder b("chained_outputs");
+	NodeId x = b.input("x", {300});
+	NodeId y1 = b.exp(x, "y1");
+	b.output(y1);
+	b.output(b.tanh(b.neg(y1), "y2"));
+	Graph g = std::move(b).build().value();
+	auto inputs = make_random_inputs(g, 4);
+	const auto expected = evaluate_reference(g, inputs);
+	const auto actual = run_cpu(g, inputs);
+	EXPECT_TRUE(all_close(actual[0].data, expected[0].data, kTranscendentalRtol, kTranscendentalAtol));
+	EXPECT_TRUE(all_close(actual[1].data, expected[1].data, kTranscendentalRtol, kTranscendentalAtol));
+}
+
 TEST(CpuBackend, OutputsCanBeInputsOrConstants) {
 	GraphBuilder b("passthrough");
 	NodeId x = b.input("x", {3});

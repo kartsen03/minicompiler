@@ -22,6 +22,13 @@ namespace minicompiler {
 // Graph inputs and constants are not pooled: inputs come from the caller
 // (the CUDA backend copies them in once per run) and constants are uploaded
 // once at compile time.
+struct PlanOptions {
+	// Give graph outputs pooled buffers. The CPU backend turns this off and
+	// writes outputs straight into the caller's tensors; the CUDA backend
+	// needs device buffers for them before copying back to the host.
+	bool pool_outputs = true;
+};
+
 struct MemoryPlan {
 	static constexpr std::int32_t kNotPooled = -1;
 
@@ -31,10 +38,10 @@ struct MemoryPlan {
 	// kNoNode if nothing reads it.
 	std::vector<NodeId> last_use;
 
-	std::size_t bytes_without_reuse = 0;  // what one buffer per value would need
+	std::size_t bytes_without_reuse = 0;  // what one buffer per pooled value would need
 	std::size_t bytes_with_reuse() const;
 };
 
-MemoryPlan plan_memory(const Graph& graph);
+MemoryPlan plan_memory(const Graph& graph, const PlanOptions& options = {});
 
 }

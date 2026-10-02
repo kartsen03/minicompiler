@@ -9,7 +9,7 @@ std::size_t MemoryPlan::bytes_with_reuse() const {
 	return std::accumulate(buffer_bytes.begin(), buffer_bytes.end(), std::size_t{0});
 }
 
-MemoryPlan plan_memory(const Graph& graph) {
+MemoryPlan plan_memory(const Graph& graph, const PlanOptions& options) {
 	const std::size_t n = graph.num_nodes();
 	MemoryPlan plan;
 	plan.buffer_of.assign(n, MemoryPlan::kNotPooled);
@@ -24,7 +24,7 @@ MemoryPlan plan_memory(const Graph& graph) {
 	for (std::size_t i=0; i<n; ++i) {
 		const NodeId id = static_cast<NodeId>(i);
 		const Node& node = graph.node(id);
-		if (!is_compute(node.op)) continue;
+		if (!is_compute(node.op) || (!options.pool_outputs && graph.is_output(id))) continue;
 
 		const std::size_t bytes = node.type.size_bytes();
 		plan.bytes_without_reuse += bytes;

@@ -3,15 +3,18 @@
 #include "cpu/kernels.hpp"
 #include "minicompiler/runtime/memory_plan.hpp"
 
+#include <algorithm>
+
 namespace minicompiler {
 namespace {
 
 // Executes the graph node by node with Eigen. Intermediates live in buffers
 // assigned by the memory planner; inputs are read in place from the caller's
-// tensors and constants from the graph.
+// tensors, constants from the graph, and graph outputs are written straight
+// into the caller's output tensors (no copy at the end of a run).
 class CpuExecutable final : public Executable {
 public:
-	explicit CpuExecutable(Graph graph) : graph_(std::move(graph)), plan_(plan_memory(graph_)) {
+	explicit CpuExecutable(Graph graph) : graph_(std::move(graph)), plan_(plan_memory(graph_, {false})) {
 		for (std::size_t bytes : plan_.buffer_bytes) buffers_.emplace_back(bytes / sizeof(float));
 		values_.assign(graph_.num_nodes(), nullptr);
 		operand_shapes_.resize(graph_.num_nodes());
@@ -36,6 +39,17 @@ public:
 			values_[graph_.inputs()[k]] = inputs[k].data.data();
 		}
 
+		// Outputs computed by a node are written in place; resizing to the
+		// same size keeps the caller's storage, so repeated runs allocate nothing.
+		outputs.resize(graph_.outputs().size());
+		destinations_.assign(graph_.num_nodes(), nullptr);
+		for (std::size_t k=0; k<graph_.outputs().size(); ++k) {
+			const Node& node = graph_.node(graph_.outputs()[k]);
+			outputs[k].type = node.type;
+			outputs[k].data.resize(node.type.num_elements());
+			if (is_compute(node.op)) destinations_[graph_.outputs()[k]] = outputs[k].data.data();
+		}
+
 		for (std::size_t i=0; i<graph_.num_nodes(); ++i) {
 			const Node& node = graph_.node(static_cast<NodeId>(i));
 			if (node.op == OpKind::Input) continue;
@@ -43,19 +57,19 @@ public:
 				values_[i] = node.constant->data();
 				continue;
 			}
-			float* out = buffers_[static_cast<std::size_t>(plan_.buffer_of[i])].data();
+			float* out = destinations_[i] ? destinations_[i] : buffers_[static_cast<std::size_t>(plan_.buffer_of[i])].data();
 			operands_.clear();
 			for (NodeId in : node.inputs) operands_.push_back(values_[in]);
 			cpu::execute_node(node, operands_, operand_shapes_[i], out, scratch_);
 			values_[i] = out;
 		}
 
-		outputs.resize(graph_.outputs().size());
+		// An output that is a graph input or a constant is still copied.
 		for (std::size_t k=0; k<graph_.outputs().size(); ++k) {
 			const NodeId id = graph_.outputs()[k];
-			const float* src = values_[id];
-			outputs[k].type = graph_.node(id).type;
-			outputs[k].data.assign(src, src + graph_.node(id).type.num_elements());
+			if (!is_compute(graph_.node(id).op)) {
+				std::copy(values_[id], values_[id] + outputs[k].data.size(), outputs[k].data.begin());
+			}
 		}
 		return Status();
 	}
@@ -67,6 +81,7 @@ private:
 	MemoryPlan plan_;
 	std::vector<std::vector<float>> buffers_;
 	std::vector<const float*> values_;               // where each node's value lives during a run
+	std::vector<float*> destinations_;               // per node: caller memory for graph outputs
 	std::vector<std::vector<Shape>> operand_shapes_;  // per node
 	std::vector<const float*> operands_;             // reused per node
 	std::vector<float> scratch_;                     // fused-kernel block buffers

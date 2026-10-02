@@ -54,6 +54,22 @@ TEST(MemoryPlan, NeverReusesAnOutputBuffer) {
 	EXPECT_NE(plan.buffer_of[t], plan.buffer_of[y1]);
 }
 
+TEST(MemoryPlan, CanLeaveOutputsToTheCaller) {
+	GraphBuilder b("outputs");
+	NodeId x = b.input("x", {8});
+	NodeId t = b.exp(x, "t");
+	NodeId y = b.neg(t, "y");
+	b.output(y);
+	Graph g = std::move(b).build().value();
+
+	PlanOptions options;
+	options.pool_outputs = false;
+	MemoryPlan plan = plan_memory(g, options);
+	EXPECT_EQ(plan.buffer_of[y], MemoryPlan::kNotPooled);
+	EXPECT_NE(plan.buffer_of[t], MemoryPlan::kNotPooled);
+	EXPECT_EQ(plan.bytes_without_reuse, 32u);
+}
+
 TEST(MemoryPlan, DeadValueFreesItsBufferImmediately) {
 	GraphBuilder b("dead");
 	NodeId x = b.input("x", {8});
