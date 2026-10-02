@@ -6,6 +6,7 @@ add_library(minicompiler STATIC
     graph_builder.cpp
     ops.cpp
     parser.cpp
+    passes/constant_folding.cpp
     passes/dead_node_elimination.cpp
     random.cpp
     runtime/backend.cpp
