@@ -431,156 +431,124 @@
 <text id="matched" x="1290.00" y="229" > </text>
 <g id="frames">
 <g >
-<title>minicompiler::run_pipeline (500,250 samples, 0.02%)</title><rect x="1389.4" y="101" width="0.3" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
-<text  x="1392.39" y="111.5" ></text>
+<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, float&gt; (500,250 samples, 0.02%)</title><rect x="1387.5" y="85" width="0.3" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1390.48" y="95.5" ></text>
 </g>
 <g >
-<title>[libc.so.6] (2,254,126,500 samples, 100.00%)</title><rect x="10.0" y="133" width="1380.0" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="13.00" y="143.5" >[libc.so.6]</text>
+<title>clock_gettime@plt (500,250 samples, 0.02%)</title><rect x="10.0" y="101" width="0.3" height="15.0" fill="rgb(229,112,27)" rx="2" ry="2" />
+<text  x="13.00" y="111.5" ></text>
 </g>
 <g >
-<title>operator delete (500,250 samples, 0.02%)</title><rect x="1385.7" y="85" width="0.3" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
-<text  x="1388.71" y="95.5" ></text>
+<title>[libc.so.6] (57,028,500 samples, 2.60%)</title><rect x="10.6" y="85" width="36.0" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.63" y="95.5" >[li..</text>
 </g>
 <g >
-<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, float&gt; (16,508,250 samples, 0.73%)</title><rect x="1355.7" y="69" width="10.1" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
-<text  x="1358.70" y="79.5" ></text>
+<title>Eigen::internal::general_matrix_matrix_product&lt;long, float, 0, false, float, 0, false, 0, 1&gt;::run (1,970,985,000 samples, 90.00%)</title><rect x="46.6" y="53" width="1241.9" height="15.0" fill="rgb(248,201,48)" rx="2" ry="2" />
+<text  x="49.56" y="63.5" >Eigen::internal::general_matrix_matrix_product&lt;long, float, 0, false, float, 0, false, 0, 1&gt;::run</text>
 </g>
 <g >
-<title>void minicompiler::cpu::(anonymous namespace)::apply_unary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (32,516,250 samples, 1.44%)</title><rect x="1365.8" y="69" width="19.9" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
-<text  x="1368.81" y="79.5" ></text>
+<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (500,250 samples, 0.02%)</title><rect x="1387.2" y="85" width="0.3" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="1390.16" y="95.5" ></text>
 </g>
 <g >
-<title>minicompiler::fuse_elementwise (500,250 samples, 0.02%)</title><rect x="1389.4" y="85" width="0.3" height="15.0" fill="rgb(208,17,4)" rx="2" ry="2" />
-<text  x="1392.39" y="95.5" ></text>
+<title>minicompiler::make_random_inputs (500,250 samples, 0.02%)</title><rect x="1387.8" y="101" width="0.3" height="15.0" fill="rgb(240,165,39)" rx="2" ry="2" />
+<text  x="1390.79" y="111.5" ></text>
 </g>
 <g >
-<title>__vdso_clock_gettime (500,250 samples, 0.02%)</title><rect x="1389.7" y="85" width="0.3" height="15.0" fill="rgb(254,226,54)" rx="2" ry="2" />
-<text  x="1392.69" y="95.5" ></text>
+<title>minicompiler::(anonymous namespace)::CpuExecutable::run (2,186,092,500 samples, 99.82%)</title><rect x="10.3" y="101" width="1377.5" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
+<text  x="13.32" y="111.5" >minicompiler::(anonymous namespace)::CpuExecutable::run</text>
 </g>
 <g >
-<title>minicompiler::make_random_inputs (500,250 samples, 0.02%)</title><rect x="1386.6" y="101" width="0.3" height="15.0" fill="rgb(240,165,39)" rx="2" ry="2" />
-<text  x="1389.63" y="111.5" ></text>
+<title>minicompiler::cpu::fused (156,078,000 samples, 7.13%)</title><rect x="1288.8" y="85" width="98.4" height="15.0" fill="rgb(219,67,16)" rx="2" ry="2" />
+<text  x="1291.82" y="95.5" >minicompile..</text>
 </g>
 <g >
-<title>minicompiler::(anonymous namespace)::ProgramBuilder::operand (500,250 samples, 0.02%)</title><rect x="1389.4" y="69" width="0.3" height="15.0" fill="rgb(211,30,7)" rx="2" ry="2" />
-<text  x="1392.39" y="79.5" ></text>
-</g>
-<g >
-<title>minicompiler::cpu::fused (170,585,250 samples, 7.57%)</title><rect x="1281.3" y="85" width="104.4" height="15.0" fill="rgb(219,67,16)" rx="2" ry="2" />
-<text  x="1284.28" y="95.5" >minicompiler..</text>
-</g>
-<g >
-<title>void Eigen::internal::evaluateProductBlockingSizesHeuristic&lt;float, float, 1, long&gt; (500,250 samples, 0.02%)</title><rect x="1281.0" y="53" width="0.3" height="15.0" fill="rgb(216,53,12)" rx="2" ry="2" />
-<text  x="1283.97" y="63.5" ></text>
-</g>
-<g >
-<title>minicompiler::(anonymous namespace)::GraphParser::parse_const (4,002,000 samples, 0.18%)</title><rect x="1386.9" y="53" width="2.5" height="15.0" fill="rgb(236,145,34)" rx="2" ry="2" />
-<text  x="1389.94" y="63.5" ></text>
-</g>
-<g >
-<title>all (2,254,126,500 samples, 100%)</title><rect x="10.0" y="197" width="1380.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
-<text  x="13.00" y="207.5" ></text>
-</g>
-<g >
-<title>void std::vector&lt;minicompiler::FusedInstr, std::allocator&lt;minicompiler::FusedInstr&gt; &gt;::_M_realloc_insert&lt;minicompiler::FusedInstr const&amp;&gt; (500,250 samples, 0.02%)</title><rect x="1389.4" y="53" width="0.3" height="15.0" fill="rgb(224,91,21)" rx="2" ry="2" />
-<text  x="1392.39" y="63.5" ></text>
-</g>
-<g >
-<title>minicompiler::uniform_values (500,250 samples, 0.02%)</title><rect x="1386.6" y="85" width="0.3" height="15.0" fill="rgb(231,120,28)" rx="2" ry="2" />
-<text  x="1389.63" y="95.5" ></text>
-</g>
-<g >
-<title>Eigen::internal::gemm_pack_lhs&lt;float, long, Eigen::internal::const_blas_data_mapper&lt;float, long, 0&gt;, 24, 8, float __vector (75,537,750 samples, 3.35%)</title><rect x="1209.6" y="37" width="46.3" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
-<text  x="1212.61" y="47.5" >Eige..</text>
-</g>
-<g >
-<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, float&gt; (1,000,500 samples, 0.04%)</title><rect x="1386.0" y="85" width="0.6" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
-<text  x="1389.02" y="95.5" ></text>
-</g>
-<g >
-<title>Eigen::internal::general_matrix_matrix_product&lt;long, float, 0, false, float, 0, false, 0, 1&gt;::run (2,026,012,500 samples, 89.88%)</title><rect x="40.3" y="53" width="1240.4" height="15.0" fill="rgb(248,201,48)" rx="2" ry="2" />
-<text  x="43.32" y="63.5" >Eigen::internal::general_matrix_matrix_product&lt;long, float, 0, false, float, 0, false, 0, 1&gt;::run</text>
-</g>
-<g >
-<title>minicompiler::cpu::execute_node (2,027,013,000 samples, 89.92%)</title><rect x="40.3" y="85" width="1241.0" height="15.0" fill="rgb(208,17,4)" rx="2" ry="2" />
-<text  x="43.32" y="95.5" >minicompiler::cpu::execute_node</text>
-</g>
-<g >
-<title>mcc (2,254,126,500 samples, 100.00%)</title><rect x="10.0" y="181" width="1380.0" height="15.0" fill="rgb(230,116,27)" rx="2" ry="2" />
+<title>mcc (2,190,094,500 samples, 100.00%)</title><rect x="10.0" y="181" width="1380.0" height="15.0" fill="rgb(230,116,27)" rx="2" ry="2" />
 <text  x="13.00" y="191.5" >mcc</text>
 </g>
 <g >
-<title>cfree (500,250 samples, 0.02%)</title><rect x="1280.7" y="53" width="0.3" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
-<text  x="1283.67" y="63.5" ></text>
+<title>Eigen::internal::gemm_pack_lhs&lt;float, long, Eigen::internal::const_blas_data_mapper&lt;float, long, 0&gt;, 24, 8, float __vector (73,536,750 samples, 3.36%)</title><rect x="1219.2" y="37" width="46.3" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
+<text  x="1222.15" y="47.5" >Eige..</text>
 </g>
 <g >
-<title>__libc_start_main (2,254,126,500 samples, 100.00%)</title><rect x="10.0" y="149" width="1380.0" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
-<text  x="13.00" y="159.5" >__libc_start_main</text>
+<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, float&gt; (12,506,250 samples, 0.57%)</title><rect x="1361.3" y="69" width="7.9" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1364.32" y="79.5" ></text>
 </g>
 <g >
-<title>void Eigen::internal::generic_product_impl&lt;Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1, -1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1, -1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::DenseShape, Eigen::DenseShape, 8&gt;::scaleAndAddTo&lt;Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1, -1&gt;, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (2,027,013,000 samples, 89.92%)</title><rect x="40.3" y="69" width="1241.0" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="43.32" y="79.5" >void Eigen::internal::generic_product_impl&lt;Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1, -1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1,..</text>
+<title>[libc.so.6] (2,190,094,500 samples, 100.00%)</title><rect x="10.0" y="133" width="1380.0" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.00" y="143.5" >[libc.so.6]</text>
 </g>
 <g >
-<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (93,546,750 samples, 4.15%)</title><rect x="1298.4" y="69" width="57.3" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
-<text  x="1301.43" y="79.5" >void m..</text>
-</g>
-<g >
-<title>minicompiler::parse_graph (4,002,000 samples, 0.18%)</title><rect x="1386.9" y="85" width="2.5" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
-<text  x="1389.94" y="95.5" ></text>
-</g>
-<g >
-<title>[libc.so.6] (500,250 samples, 0.02%)</title><rect x="1298.1" y="69" width="0.3" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="1301.12" y="79.5" ></text>
-</g>
-<g >
-<title>[libc.so.6] (49,524,750 samples, 2.20%)</title><rect x="10.0" y="85" width="30.3" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="13.00" y="95.5" >[l..</text>
-</g>
-<g >
-<title>minicompiler::parse_graph_file (4,002,000 samples, 0.18%)</title><rect x="1386.9" y="101" width="2.5" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
-<text  x="1389.94" y="111.5" ></text>
-</g>
-<g >
-<title>minicompiler::uniform_values (3,501,750 samples, 0.16%)</title><rect x="1387.2" y="37" width="2.2" height="15.0" fill="rgb(231,120,28)" rx="2" ry="2" />
-<text  x="1390.24" y="47.5" ></text>
-</g>
-<g >
-<title>Eigen::internal::gemm_pack_rhs&lt;float, long, Eigen::internal::const_blas_data_mapper&lt;float, long, 0&gt;, 4, 0, false, false&gt;::operator (40,520,250 samples, 1.80%)</title><rect x="1255.9" y="37" width="24.8" height="15.0" fill="rgb(230,117,27)" rx="2" ry="2" />
-<text  x="1258.86" y="47.5" >E..</text>
-</g>
-<g >
-<title>minicompiler::(anonymous namespace)::CpuExecutable::run (2,248,623,750 samples, 99.76%)</title><rect x="10.0" y="101" width="1376.6" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
-<text  x="13.00" y="111.5" >minicompiler::(anonymous namespace)::CpuExecutable::run</text>
-</g>
-<g >
-<title>minicompiler::(anonymous namespace)::GraphParser::statement (4,002,000 samples, 0.18%)</title><rect x="1386.9" y="69" width="2.5" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
-<text  x="1389.94" y="79.5" ></text>
-</g>
-<g >
-<title>[libc.so.6] (500,250 samples, 0.02%)</title><rect x="1389.4" y="37" width="0.3" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="1392.39" y="47.5" ></text>
-</g>
-<g >
-<title>std::chrono::_V2::steady_clock::now (500,250 samples, 0.02%)</title><rect x="1389.7" y="101" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
-<text  x="1392.69" y="111.5" ></text>
-</g>
-<g >
-<title>_start (2,254,126,500 samples, 100.00%)</title><rect x="10.0" y="165" width="1380.0" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<title>_start (2,190,094,500 samples, 100.00%)</title><rect x="10.0" y="165" width="1380.0" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
 <text  x="13.00" y="175.5" >_start</text>
 </g>
 <g >
-<title>[libc.so.6] (500,250 samples, 0.02%)</title><rect x="1386.9" y="37" width="0.3" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="1389.94" y="47.5" ></text>
+<title>Eigen::internal::gemm_pack_rhs&lt;float, long, Eigen::internal::const_blas_data_mapper&lt;float, long, 0&gt;, 4, 0, false, false&gt;::operator (36,518,250 samples, 1.67%)</title><rect x="1265.5" y="37" width="23.0" height="15.0" fill="rgb(230,117,27)" rx="2" ry="2" />
+<text  x="1268.49" y="47.5" >E..</text>
 </g>
 <g >
-<title>Eigen::internal::gebp_kernel&lt;float, float, long, Eigen::internal::blas_data_mapper&lt;float, long, 0, 0, 1&gt;, 24, 4, false, false&gt;::operator (1,909,954,500 samples, 84.73%)</title><rect x="40.3" y="37" width="1169.3" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
-<text  x="43.32" y="47.5" >Eigen::internal::gebp_kernel&lt;float, float, long, Eigen::internal::blas_data_mapper&lt;float, long, 0, 0, 1&gt;, 24, 4, false, false&gt;::operator</text>
+<title>minicompiler::uniform_values (500,250 samples, 0.02%)</title><rect x="1387.8" y="85" width="0.3" height="15.0" fill="rgb(231,120,28)" rx="2" ry="2" />
+<text  x="1390.79" y="95.5" ></text>
 </g>
 <g >
-<title>main (2,254,126,500 samples, 100.00%)</title><rect x="10.0" y="117" width="1380.0" height="15.0" fill="rgb(243,179,42)" rx="2" ry="2" />
+<title>minicompiler::parse_graph (3,001,500 samples, 0.14%)</title><rect x="1388.1" y="85" width="1.9" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1391.11" y="95.5" ></text>
+</g>
+<g >
+<title>minicompiler::(anonymous namespace)::GraphParser::statement (3,001,500 samples, 0.14%)</title><rect x="1388.1" y="69" width="1.9" height="15.0" fill="rgb(254,227,54)" rx="2" ry="2" />
+<text  x="1391.11" y="79.5" ></text>
+</g>
+<g >
+<title>__libc_start_main (2,190,094,500 samples, 100.00%)</title><rect x="10.0" y="149" width="1380.0" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
+<text  x="13.00" y="159.5" >__libc_start_main</text>
+</g>
+<g >
+<title>minicompiler::uniform_values (3,001,500 samples, 0.14%)</title><rect x="1388.1" y="37" width="1.9" height="15.0" fill="rgb(231,120,28)" rx="2" ry="2" />
+<text  x="1391.11" y="47.5" ></text>
+</g>
+<g >
+<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (92,046,000 samples, 4.20%)</title><rect x="1303.3" y="69" width="58.0" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="1306.32" y="79.5" >void m..</text>
+</g>
+<g >
+<title>void Eigen::internal::generic_product_impl&lt;Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1, -1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1, -1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::DenseShape, Eigen::DenseShape, 8&gt;::scaleAndAddTo&lt;Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1, -1&gt;, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (1,971,485,250 samples, 90.02%)</title><rect x="46.6" y="69" width="1242.2" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="49.56" y="79.5" >void Eigen::internal::generic_product_impl&lt;Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1, -1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Matrix&lt;float, -1, -1, 1, -1,..</text>
+</g>
+<g >
+<title>minicompiler::cpu::execute_node (1,971,485,250 samples, 90.02%)</title><rect x="46.6" y="85" width="1242.2" height="15.0" fill="rgb(208,17,4)" rx="2" ry="2" />
+<text  x="49.56" y="95.5" >minicompiler::cpu::execute_node</text>
+</g>
+<g >
+<title>main (2,190,094,500 samples, 100.00%)</title><rect x="10.0" y="117" width="1380.0" height="15.0" fill="rgb(243,179,42)" rx="2" ry="2" />
 <text  x="13.00" y="127.5" >main</text>
+</g>
+<g >
+<title>all (2,190,094,500 samples, 100%)</title><rect x="10.0" y="197" width="1380.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="13.00" y="207.5" ></text>
+</g>
+<g >
+<title>cfree (500,250 samples, 0.02%)</title><rect x="1303.0" y="69" width="0.3" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="1306.00" y="79.5" ></text>
+</g>
+<g >
+<title>void minicompiler::cpu::(anonymous namespace)::apply_unary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (28,514,250 samples, 1.30%)</title><rect x="1369.2" y="69" width="18.0" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
+<text  x="1372.20" y="79.5" ></text>
+</g>
+<g >
+<title>minicompiler::parse_graph_file (3,001,500 samples, 0.14%)</title><rect x="1388.1" y="101" width="1.9" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="1391.11" y="111.5" ></text>
+</g>
+<g >
+<title>Eigen::internal::gebp_kernel&lt;float, float, long, Eigen::internal::blas_data_mapper&lt;float, long, 0, 0, 1&gt;, 24, 4, false, false&gt;::operator (1,860,930,000 samples, 84.97%)</title><rect x="46.6" y="37" width="1172.6" height="15.0" fill="rgb(212,33,7)" rx="2" ry="2" />
+<text  x="49.56" y="47.5" >Eigen::internal::gebp_kernel&lt;float, float, long, Eigen::internal::blas_data_mapper&lt;float, long, 0, 0, 1&gt;, 24, 4, false, false&gt;::operator</text>
+</g>
+<g >
+<title>minicompiler::(anonymous namespace)::GraphParser::parse_const (3,001,500 samples, 0.14%)</title><rect x="1388.1" y="53" width="1.9" height="15.0" fill="rgb(236,145,34)" rx="2" ry="2" />
+<text  x="1391.11" y="63.5" ></text>
+</g>
+<g >
+<title>cfree (500,250 samples, 0.02%)</title><rect x="1288.5" y="53" width="0.3" height="15.0" fill="rgb(223,86,20)" rx="2" ry="2" />
+<text  x="1291.50" y="63.5" ></text>
 </g>
 </g>
 </svg>

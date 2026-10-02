@@ -22,37 +22,40 @@ cache-miss or instruction counts.
 
 ## What the profiles showed
 
-**1. The unfused GELU chain is memory-bound.** Without fusion, 87% of samples
-land in the eight cheap binary kernels (48% vector-vector, 39%
-vector-scalar), and only 12% in `tanh`, the one op with real arithmetic. Each
-of those ops streams a 32 MB tensor through DRAM to do one multiply or add per
-element. That is the traffic fusion removes: the fused kernel reads `x` once
-and writes `y` once.
+**1. The unfused GELU chain is memory-bound.** Without fusion, 88% of samples
+land in the eight cheap binary kernels (48.4% vector-vector, 39.3%
+vector-scalar) and only 11.5% in `tanh`, the one op with real arithmetic
+([summary](gelu_unfused.txt)). Each of those ops streams a 32 MB tensor
+through DRAM to do one multiply or add per element. That is the traffic
+fusion removes: the fused kernel reads `x` once and writes `y` once.
 
-**2. A copy of every output cost 16.8% of the fused kernel's time, and was
-removed.** In the first fused profile ([before](gelu_fused_before_output_fix.txt)),
-libc accounted for 16.8% of samples, spread over addresses inside `memmove`.
-The frame-pointer call graph credited them to `main`, because glibc's
-`memmove` keeps no frame pointer, so its real caller is skipped. Re-recording
-with `--call-graph dwarf` showed the caller was `std::copy` in
-`CpuExecutable::run`: each run computed the output into a pooled buffer, then
-copied all 32 MB into the caller's tensor. Commit `bd2306a` makes the
-executable write graph outputs straight into the caller's tensors. On the
-same benchmark (`bench_cpu --quick`, 2048x4096) the fused GELU went from
-12.97 ms to 10.64 ms, and libc disappears from the [new profile](gelu_fused.txt).
+**2. A copy of every output cost about 17% of the fused kernel's time, and
+was removed.** In the fused profile taken before the fix
+([summary](gelu_fused_before_output_fix.txt), recorded at `cbcafa7`), 17.5% of
+samples were in `libc.so.6`, at unsymbolized addresses. The frame-pointer
+call graph credited them to `main`, because the libc routine keeps no frame
+pointer and its real caller is skipped. Re-recording with
+`perf record --call-graph dwarf` showed that the caller was `std::copy` in
+`CpuExecutable::run`: each run computed the output into a pooled buffer and
+then copied all 32 MB into the caller's tensor. Commit `bd2306a` makes the
+executable write graph outputs straight into the caller's tensors. Measured
+with the same build flags, alternating builds three times
+([output_copy_fix_timing.json](output_copy_fix_timing.json)), the fused GELU
+went from a median of 12.6 ms to 10.7 ms, and libc dropped to 0.2% of samples
+([summary](gelu_fused.txt)).
 
-**3. In the fused kernel, the remaining time is the compulsory traffic and
-`tanh`.** With fusion, `tanh` rises from 12% to 28% of samples. The
-vector-vector kernels still take 49%, because the first instruction that
-reads `x` and the last one that writes `y` absorb the unavoidable DRAM
-read of the input and write of the output; the intermediates in between stay
-in the 2 KB block buffers. `cpu::fused` itself, which dispatches the
-instructions block by block, is 8%.
+**3. In the fused kernel, the rest is compulsory traffic and `tanh`.** With
+fusion, `tanh` rises from 11.5% to 28.4% of samples. The vector-vector
+kernels still take 51.7%: the first instruction that reads `x` and the last
+one that writes `y` absorb the unavoidable DRAM read of the input and write of
+the output, while the intermediates in between stay in the 2 KB block
+buffers. `cpu::fused` itself, which dispatches instructions block by block,
+is 7.2%.
 
 **4. The MLP block is GEMM-bound, so fusion has little to work with.** About
-90% of samples are in Eigen's matrix multiply: 84.7% in the `gebp_kernel`
-micro-kernel and 5.2% in operand packing (`gemm_pack_lhs`, `gemm_pack_rhs`).
-The fused elementwise kernels are about 7%. This is why fusion speeds the MLP
-block up by only about 1.1x (see the README results), while the GELU chain
-gains about 3x. Making this graph faster would take a faster or multithreaded
-GEMM, not more fusion.
+90% of samples are in Eigen's matrix multiply: 85.0% in the `gebp_kernel`
+micro-kernel and 5.0% in operand packing (`gemm_pack_lhs`, `gemm_pack_rhs`).
+The fused elementwise kernels take about 7% ([summary](mlp_block_fused.txt)).
+This caps what fusion can do for this graph (about 1.1x, see the results in
+the main README), while the GELU chain gains about 3x. Making the MLP block
+faster would take a faster or multithreaded GEMM, not more fusion.

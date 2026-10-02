@@ -1,6 +1,6 @@
 <?xml version="1.0" standalone="no"?>
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-<svg version="1.1" width="1400" height="230" onload="init(evt)" viewBox="0 0 1400 230" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<svg version="1.1" width="1400" height="278" onload="init(evt)" viewBox="0 0 1400 278" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
 <!-- Flame graph stack visualization. See https://github.com/brendangregg/FlameGraph for latest version, and http://www.brendangregg.com/flamegraphs.html for examples. -->
 <!-- NOTES:  -->
 <defs>
@@ -422,121 +422,153 @@
 	}
 ]]>
 </script>
-<rect x="0.0" y="0" width="1400.0" height="230.0" fill="url(#background)"  />
+<rect x="0.0" y="0" width="1400.0" height="278.0" fill="url(#background)"  />
 <text id="title" x="700.00" y="24" >gelu_unfused</text>
-<text id="details" x="10.00" y="213" > </text>
+<text id="details" x="10.00" y="261" > </text>
 <text id="unzoom" x="10.00" y="24" class="hide">Reset Zoom</text>
 <text id="search" x="1290.00" y="24" >Search</text>
 <text id="ignorecase" x="1374.00" y="24" >ic</text>
-<text id="matched" x="1290.00" y="213" > </text>
+<text id="matched" x="1290.00" y="261" > </text>
 <g id="frames">
 <g >
-<title>[libc.so.6] (1,500,750 samples, 0.07%)</title><rect x="12.2" y="69" width="0.9" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="15.17" y="79.5" ></text>
+<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="165" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="13.00" y="175.5" ></text>
 </g>
 <g >
-<title>main (2,230,114,500 samples, 99.96%)</title><rect x="10.3" y="101" width="1379.4" height="15.0" fill="rgb(243,179,42)" rx="2" ry="2" />
-<text  x="13.31" y="111.5" >main</text>
+<title>minicompiler::parse_graph (500,250 samples, 0.02%)</title><rect x="1389.7" y="117" width="0.3" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="1392.69" y="127.5" ></text>
 </g>
 <g >
-<title>minicompiler::Graph::verify (500,250 samples, 0.02%)</title><rect x="1389.4" y="69" width="0.3" height="15.0" fill="rgb(207,11,2)" rx="2" ry="2" />
-<text  x="1392.38" y="79.5" ></text>
+<title>minicompiler::(anonymous namespace)::CpuExecutable::run (2,229,114,000 samples, 99.24%)</title><rect x="10.9" y="133" width="1369.6" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
+<text  x="13.92" y="143.5" >minicompiler::(anonymous namespace)::CpuExecutable::run</text>
 </g>
 <g >
-<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="117" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
-<text  x="13.00" y="127.5" ></text>
+<title>[libc.so.6] (500,250 samples, 0.02%)</title><rect x="10.6" y="117" width="0.3" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.61" y="127.5" ></text>
 </g>
 <g >
-<title>operator delete (500,250 samples, 0.02%)</title><rect x="1389.4" y="53" width="0.3" height="15.0" fill="rgb(247,196,46)" rx="2" ry="2" />
-<text  x="1392.38" y="63.5" ></text>
+<title>main (2,245,122,000 samples, 99.96%)</title><rect x="10.6" y="149" width="1379.4" height="15.0" fill="rgb(243,179,42)" rx="2" ry="2" />
+<text  x="13.61" y="159.5" >main</text>
 </g>
 <g >
-<title>[libc.so.6] (2,501,250 samples, 0.11%)</title><rect x="10.6" y="69" width="1.6" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="13.62" y="79.5" ></text>
+<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="181" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="13.00" y="191.5" ></text>
 </g>
 <g >
-<title>void minicompiler::cpu::(anonymous namespace)::apply_unary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (267,133,500 samples, 11.97%)</title><rect x="1215.8" y="53" width="165.2" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
-<text  x="1218.80" y="63.5" >void minicompiler::cp..</text>
+<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.3" y="101" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="13.31" y="111.5" ></text>
 </g>
 <g >
-<title>[libc.so.6] (1,000,500 samples, 0.04%)</title><rect x="1381.0" y="69" width="0.6" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="1384.03" y="79.5" ></text>
+<title>__cxa_finalize (500,250 samples, 0.02%)</title><rect x="10.3" y="69" width="0.3" height="15.0" fill="rgb(240,162,38)" rx="2" ry="2" />
+<text  x="13.31" y="79.5" ></text>
 </g>
 <g >
-<title>mcc (2,231,115,000 samples, 100.00%)</title><rect x="10.0" y="165" width="1380.0" height="15.0" fill="rgb(230,116,27)" rx="2" ry="2" />
-<text  x="13.00" y="175.5" >mcc</text>
+<title>minicompiler::parse_graph_file (500,250 samples, 0.02%)</title><rect x="1389.7" y="133" width="0.3" height="15.0" fill="rgb(223,85,20)" rx="2" ry="2" />
+<text  x="1392.69" y="143.5" ></text>
 </g>
 <g >
-<title>std::chrono::_V2::steady_clock::now (500,250 samples, 0.02%)</title><rect x="1389.7" y="101" width="0.3" height="15.0" fill="rgb(249,203,48)" rx="2" ry="2" />
+<title>mcc (2,246,122,500 samples, 100.00%)</title><rect x="10.0" y="213" width="1380.0" height="15.0" fill="rgb(230,116,27)" rx="2" ry="2" />
+<text  x="13.00" y="223.5" >mcc</text>
+</g>
+<g >
+<title>__libc_start_main (2,245,622,250 samples, 99.98%)</title><rect x="10.3" y="181" width="1379.7" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
+<text  x="13.31" y="191.5" >__libc_start_main</text>
+</g>
+<g >
+<title>[libc.so.6] (500,250 samples, 0.02%)</title><rect x="10.3" y="149" width="0.3" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.31" y="159.5" ></text>
+</g>
+<g >
+<title>std::ios_base::Init::~Init (500,250 samples, 0.02%)</title><rect x="10.3" y="53" width="0.3" height="15.0" fill="rgb(236,146,35)" rx="2" ry="2" />
+<text  x="13.31" y="63.5" ></text>
+</g>
+<g >
+<title>minicompiler::(anonymous namespace)::CpuBackend::compile (500,250 samples, 0.02%)</title><rect x="10.6" y="133" width="0.3" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
+<text  x="13.61" y="143.5" ></text>
+</g>
+<g >
+<title>[libstdc++.so.6.0.33] (500,250 samples, 0.02%)</title><rect x="10.3" y="85" width="0.3" height="15.0" fill="rgb(216,51,12)" rx="2" ry="2" />
+<text  x="13.31" y="95.5" ></text>
+</g>
+<g >
+<title>_start (2,245,622,250 samples, 99.98%)</title><rect x="10.3" y="197" width="1379.7" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
+<text  x="13.31" y="207.5" >_start</text>
+</g>
+<g >
+<title>all (2,246,122,500 samples, 100%)</title><rect x="10.0" y="229" width="1380.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
+<text  x="13.00" y="239.5" ></text>
+</g>
+<g >
+<title>minicompiler::(anonymous namespace)::GraphParser::parse_type (500,250 samples, 0.02%)</title><rect x="1389.7" y="101" width="0.3" height="15.0" fill="rgb(238,156,37)" rx="2" ry="2" />
 <text  x="1392.69" y="111.5" ></text>
-</g>
-<g >
-<title>minicompiler::cpu::binary (1,944,471,750 samples, 87.15%)</title><rect x="13.1" y="53" width="1202.7" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
-<text  x="16.09" y="63.5" >minicompiler::cpu::binary</text>
 </g>
 <g >
 <title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="133" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
 <text  x="13.00" y="143.5" ></text>
 </g>
 <g >
-<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (1,074,036,750 samples, 48.14%)</title><rect x="13.1" y="37" width="664.3" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
-<text  x="16.09" y="47.5" >void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, ..</text>
+<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="117" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="13.00" y="127.5" ></text>
 </g>
 <g >
-<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, float&gt; (870,435,000 samples, 39.01%)</title><rect x="677.4" y="37" width="538.4" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
-<text  x="680.41" y="47.5" >void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eig..</text>
+<title>[libc.so.6] (1,500,750 samples, 0.07%)</title><rect x="10.9" y="117" width="0.9" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.92" y="127.5" ></text>
 </g>
 <g >
-<title>minicompiler::make_random_inputs (13,506,750 samples, 0.61%)</title><rect x="1381.0" y="85" width="8.4" height="15.0" fill="rgb(240,165,39)" rx="2" ry="2" />
-<text  x="1384.03" y="95.5" ></text>
+<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (1,087,043,250 samples, 48.40%)</title><rect x="11.8" y="85" width="667.9" height="15.0" fill="rgb(212,34,8)" rx="2" ry="2" />
+<text  x="14.84" y="95.5" >void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -..</text>
 </g>
 <g >
-<title>minicompiler::(anonymous namespace)::CpuExecutable::run (2,213,106,000 samples, 99.19%)</title><rect x="12.2" y="85" width="1368.8" height="15.0" fill="rgb(227,102,24)" rx="2" ry="2" />
-<text  x="15.17" y="95.5" >minicompiler::(anonymous namespace)::CpuExecutable::run</text>
+<title>void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt;, float&gt; (882,941,250 samples, 39.31%)</title><rect x="679.7" y="85" width="542.5" height="15.0" fill="rgb(224,89,21)" rx="2" ry="2" />
+<text  x="682.71" y="95.5" >void minicompiler::cpu::(anonymous namespace)::apply_binary&lt;Eigen::Map&lt;Eig..</text>
 </g>
 <g >
-<title>[libc.so.6] (2,230,614,750 samples, 99.98%)</title><rect x="10.3" y="117" width="1379.7" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
-<text  x="13.31" y="127.5" >[libc.so.6]</text>
+<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="197" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="13.00" y="207.5" ></text>
 </g>
 <g >
-<title>minicompiler::(anonymous namespace)::CpuBackend::compile (2,501,250 samples, 0.11%)</title><rect x="10.6" y="85" width="1.6" height="15.0" fill="rgb(252,219,52)" rx="2" ry="2" />
-<text  x="13.62" y="95.5" ></text>
+<title>minicompiler::cpu::execute_node (2,227,613,250 samples, 99.18%)</title><rect x="11.8" y="117" width="1368.7" height="15.0" fill="rgb(208,17,4)" rx="2" ry="2" />
+<text  x="14.84" y="127.5" >minicompiler::cpu::execute_node</text>
 </g>
 <g >
-<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="85" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
-<text  x="13.00" y="95.5" ></text>
+<title>[libc.so.6] (2,001,000 samples, 0.09%)</title><rect x="1380.5" y="117" width="1.2" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="1383.47" y="127.5" ></text>
 </g>
 <g >
-<title>minicompiler::run_pipeline (500,250 samples, 0.02%)</title><rect x="1389.4" y="85" width="0.3" height="15.0" fill="rgb(210,25,6)" rx="2" ry="2" />
-<text  x="1392.38" y="95.5" ></text>
+<title>minicompiler::make_random_inputs (15,007,500 samples, 0.67%)</title><rect x="1380.5" y="133" width="9.2" height="15.0" fill="rgb(240,165,39)" rx="2" ry="2" />
+<text  x="1383.47" y="143.5" ></text>
 </g>
 <g >
-<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="101" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
-<text  x="13.00" y="111.5" ></text>
+<title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.3" y="117" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
+<text  x="13.31" y="127.5" ></text>
 </g>
 <g >
 <title>[ld-linux-x86-64.so.2] (500,250 samples, 0.02%)</title><rect x="10.0" y="149" width="0.3" height="15.0" fill="rgb(243,178,42)" rx="2" ry="2" />
 <text  x="13.00" y="159.5" ></text>
 </g>
 <g >
-<title>all (2,231,115,000 samples, 100%)</title><rect x="10.0" y="181" width="1380.0" height="15.0" fill="rgb(213,39,9)" rx="2" ry="2" />
-<text  x="13.00" y="191.5" ></text>
+<title>minicompiler::cpu::binary (1,969,984,500 samples, 87.71%)</title><rect x="11.8" y="101" width="1210.4" height="15.0" fill="rgb(209,18,4)" rx="2" ry="2" />
+<text  x="14.84" y="111.5" >minicompiler::cpu::binary</text>
 </g>
 <g >
-<title>_start (2,230,614,750 samples, 99.98%)</title><rect x="10.3" y="149" width="1379.7" height="15.0" fill="rgb(245,185,44)" rx="2" ry="2" />
-<text  x="13.31" y="159.5" >_start</text>
+<title>_IO_fflush (500,250 samples, 0.02%)</title><rect x="10.3" y="37" width="0.3" height="15.0" fill="rgb(218,60,14)" rx="2" ry="2" />
+<text  x="13.31" y="47.5" ></text>
 </g>
 <g >
-<title>__libc_start_main (2,230,614,750 samples, 99.98%)</title><rect x="10.3" y="133" width="1379.7" height="15.0" fill="rgb(236,142,34)" rx="2" ry="2" />
-<text  x="13.31" y="143.5" >__libc_start_main</text>
+<title>void minicompiler::cpu::(anonymous namespace)::apply_unary&lt;Eigen::Map&lt;Eigen::Array&lt;float, -1, 1, 0, -1, 1&gt; const, 0, Eigen::Stride&lt;0, 0&gt; &gt; &gt; (257,628,750 samples, 11.47%)</title><rect x="1222.2" y="101" width="158.3" height="15.0" fill="rgb(213,40,9)" rx="2" ry="2" />
+<text  x="1225.19" y="111.5" >void minicompiler::c..</text>
 </g>
 <g >
-<title>minicompiler::cpu::execute_node (2,211,605,250 samples, 99.13%)</title><rect x="13.1" y="69" width="1367.9" height="15.0" fill="rgb(208,17,4)" rx="2" ry="2" />
-<text  x="16.09" y="79.5" >minicompiler::cpu::execute_node</text>
+<title>minicompiler::uniform_values (13,006,500 samples, 0.58%)</title><rect x="1381.7" y="117" width="8.0" height="15.0" fill="rgb(231,120,28)" rx="2" ry="2" />
+<text  x="1384.70" y="127.5" ></text>
 </g>
 <g >
-<title>minicompiler::uniform_values (12,506,250 samples, 0.56%)</title><rect x="1381.6" y="69" width="7.8" height="15.0" fill="rgb(231,120,28)" rx="2" ry="2" />
-<text  x="1384.65" y="79.5" ></text>
+<title>[libc.so.6] (2,245,622,250 samples, 99.98%)</title><rect x="10.3" y="165" width="1379.7" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.31" y="175.5" >[libc.so.6]</text>
+</g>
+<g >
+<title>[libc.so.6] (500,250 samples, 0.02%)</title><rect x="10.3" y="133" width="0.3" height="15.0" fill="rgb(223,84,20)" rx="2" ry="2" />
+<text  x="13.31" y="143.5" ></text>
 </g>
 </g>
 </svg>

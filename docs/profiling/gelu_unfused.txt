@@ -1,6 +1,10 @@
 # mcc bench/graphs/gelu_chain.mcg --dim M=2048 --passes none --bench --warmup 3 --reps 60
-# perf record -e cpu-clock -F 1999 -g; self time by shared object and symbol
- 48.14%  mcc        void cpu::apply_binary<ConstArrayMap, ConstArrayMap >
- 39.01%  mcc        void cpu::apply_binary<ConstArrayMap, float> [clone .isra.0]
- 11.97%  mcc        void cpu::apply_unary<ConstArrayMap >
-  0.56%  mcc        uniform_values
+# perf record -e cpu-clock -F 1999 -g
+# self time by shared object:
+#   99.78%  mcc
+#   0.20%  libc.so.6
+# self time by shared object and symbol:
+ 48.40%  mcc        void cpu::apply_binary<ConstArrayMap, ConstArrayMap >
+ 39.31%  mcc        void cpu::apply_binary<ConstArrayMap, float> [clone .isra.0]
+ 11.47%  mcc        void cpu::apply_unary<ConstArrayMap >
+  0.58%  mcc        uniform_values
