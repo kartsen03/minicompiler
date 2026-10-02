@@ -67,6 +67,6 @@ profile mlp_block_fused "$G/mlp_block.mcg" --dim B=512 --passes default --bench 
     echo "kernel: $(uname -r)"
     echo "cpu: $(grep -m1 'model name' /proc/cpuinfo | cut -d: -f2- | sed 's/^ //')"
     echo "FlameGraph: $(git -C "$FLAMEGRAPH_DIR" rev-parse --short HEAD)"
-    echo "minicompiler: $(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet || echo -dirty)"
+    echo "minicompiler: $(git -C "$ROOT" rev-parse --short HEAD)$(git -C "$ROOT" diff --quiet -- . ':!docs/profiling' || echo -dirty)"
 } > "$OUT/environment.txt"
 cat "$OUT/environment.txt"
