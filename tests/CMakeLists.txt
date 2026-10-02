@@ -9,6 +9,7 @@ add_executable(minicompiler_tests
     test_memory_plan.cpp
     test_operator_fusion.cpp
     test_parser.cpp
+    test_pipeline.cpp
     test_tensor.cpp
     test_util.cpp
 )

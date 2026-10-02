@@ -9,6 +9,7 @@ add_library(minicompiler STATIC
     passes/constant_folding.cpp
     passes/dead_node_elimination.cpp
     passes/operator_fusion.cpp
+    passes/pipeline.cpp
     random.cpp
     runtime/backend.cpp
     runtime/host_tensor.cpp
