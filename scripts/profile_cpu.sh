@@ -45,9 +45,9 @@ profile() {  # name, then mcc arguments
     "$FLAMEGRAPH_DIR/flamegraph.pl" --title "$name" --width 1400 "/tmp/$name.folded" > "$OUT/$name.svg"
     {
         echo "# mcc $*"
-        echo "# perf record -e cpu-clock -F 1999 -g; self time by symbol"
-        "$PERF" report -i "$data" --stdio --no-children --sort symbol --percent-limit 0.5 2>/dev/null \
-            | grep -E '^ +[0-9]' | sed -E 's/ +$//' | head -25
+        echo "# perf record -e cpu-clock -F 1999 -g; self time by shared object and symbol"
+        "$PERF" report -i "$data" --stdio --no-children --sort dso,symbol -g none --percent-limit 0.5 2>/dev/null \
+            | grep -E '^ +[0-9.]+%' | python3 scripts/perf_summary.py | head -25
     } > "$OUT/$name.txt"
     rm -f "$data"
     echo "$OUT/$name.svg"
