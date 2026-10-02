@@ -100,6 +100,19 @@ The same graphs with no passes and with the full pipeline, on the Eigen
 backend, single-threaded (`bench/bench_cpu.cpp`):
 
 <!-- BEGIN cpu-passes -->
+| Graph | Size | Nodes | Compute nodes | Passes off | Passes on | Speedup |
+|---|---|---:|---:|---:|---:|---:|
+| `gelu_chain` | 1x4096 (16 KB) | 17 → 2 | 11 → 1 | 0.0039 ms | 0.0042 ms | 0.91x |
+| `gelu_chain` | 64x4096 (1 MB) | 17 → 2 | 11 → 1 | 0.596 ms | 0.242 ms | 2.46x |
+| `gelu_chain` | 256x4096 (4 MB) | 17 → 2 | 11 → 1 | 2.79 ms | 1.20 ms | 2.33x |
+| `gelu_chain` | 2048x4096 (32 MB) | 17 → 2 | 11 → 1 | 34.0 ms | 10.6 ms | 3.20x |
+| `matmul_bias_relu` | 64x1024 @ 1024x1024 | 6 → 5 | 3 → 2 | 1.76 ms | 1.76 ms | 1.00x |
+| `matmul_bias_relu` | 256x1024 @ 1024x1024 | 6 → 5 | 3 → 2 | 6.46 ms | 6.32 ms | 1.02x |
+| `mlp_block` | B=32, 512->2048->512 | 37 → 13 | 22 → 4 | 2.23 ms | 2.21 ms | 1.01x |
+| `mlp_block` | B=128, 512->2048->512 | 37 → 13 | 22 → 4 | 7.68 ms | 7.39 ms | 1.04x |
+| `mlp_block` | B=512, 512->2048->512 | 37 → 13 | 22 → 4 | 28.7 ms | 26.3 ms | 1.09x |
+
+Measured on CPU: 12th Gen Intel(R) Core(TM) i7-12700H, OS: Ubuntu 24.04.4 LTS, kernel 6.6.114.1-microsoft-standard-WSL2, compiler: gcc 13.3.0, Eigen 3.4.0, build: Release, march_native=ON, threads: 1 (Eigen without OpenMP), commit 2eb39b6. Median of interleaved runs; see `results/cpu/passes.json` for p10/p90 and the per-pass ablation.
 <!-- END cpu-passes -->
 
 Fusion helps most when a chain of cheap elementwise ops streams tensors
@@ -114,6 +127,7 @@ Profiles and analysis are in [`docs/profiling/`](docs/profiling).
 ### Against PyTorch (CPU)
 
 <!-- BEGIN cpu-torch -->
+_Not recorded yet._
 <!-- END cpu-torch -->
 
 ## Testing

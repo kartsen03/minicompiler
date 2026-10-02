@@ -99,10 +99,9 @@ def main() -> int:
     readme = Path(args.readme)
     text = readme.read_text(encoding="utf-8")
     for name, fn in TABLES.items():
-        pattern = re.compile(rf"(<!-- BEGIN {name} -->\n).*?(\n<!-- END {name} -->)", re.S)
-        text, n = pattern.subn(lambda m: m.group(1) + fn() + m.group(2), text)
-        if n:
-            print(f"updated {name}")
+        pattern = re.compile(rf"(<!-- BEGIN {name} -->\n)(?:.*?\n)?(<!-- END {name} -->)", re.S)
+        text, n = pattern.subn(lambda m: m.group(1) + fn() + "\n" + m.group(2), text)
+        print(f"{'updated' if n else 'no markers for'} {name}")
     readme.write_text(text, encoding="utf-8", newline="\n")
     return 0
 
