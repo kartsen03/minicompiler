@@ -1,0 +1,7 @@
+# Check out every text file with LF endings, on Windows too: the build and
+# scripts run under Linux/WSL, where CRLF breaks shell scripts.
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.pdf  binary

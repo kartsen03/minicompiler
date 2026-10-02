@@ -1,27 +1,48 @@
-# Build artifacts
+# Build trees
 build/
-*.o
-*.so
+build-*/
+cmake-build-*/
+out/
 
-# CMake
+# CMake (in-source builds)
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
+CTestTestfile.cmake
+Testing/
 Makefile
 compile_commands.json
+
+# Compiled objects
+*.o
+*.obj
+*.a
+*.so
+*.exe
 
 # Editors / IDEs
 .vscode/
 .idea/
+.cache/
 
-# IR visualizations
-*.dot
-docs/ir_diagrams/*.png
+# Python
+.venv/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
 
-# Profiling output
+# Profiling output. Flame graph SVGs and text summaries under docs/ are
+# committed; raw recordings are large and machine-specific.
 perf.data*
 callgrind.out*
 gmon.out
+*.ncu-rep
+*.nsys-rep
+*.qdrep
+*.sqlite
+
+# IR dumps written by local runs (the curated ones live in docs/ir_diagrams/)
+/ir_dumps/
 
 # OS junk
 .DS_Store
