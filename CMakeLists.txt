@@ -44,6 +44,7 @@ include(cmake/Dependencies.cmake)
 enable_testing()
 
 add_subdirectory(src)
+add_subdirectory(tools)
 if(MINICOMPILER_BUILD_TESTS)
     add_subdirectory(tests)
 endif()
