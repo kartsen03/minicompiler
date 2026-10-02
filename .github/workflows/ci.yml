@@ -16,7 +16,7 @@ jobs:
           - { name: "Clang Release", cc: clang, cxx: clang++, build_type: Release, sanitize: "OFF" }
           - { name: "GCC Debug + ASan/UBSan", cc: gcc, cxx: g++, build_type: Debug, sanitize: "ON" }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install dependencies
         run: |
