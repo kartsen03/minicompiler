@@ -1,6 +1,7 @@
 include(GoogleTest)
 
 add_executable(minicompiler_tests
+    test_cpu_backend.cpp
     test_dot_export.cpp
     test_graph.cpp
     test_memory_plan.cpp
