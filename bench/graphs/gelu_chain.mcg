@@ -1,0 +1,29 @@
+# GELU activation (tanh approximation), written out op by op:
+#   y = 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+# sqrt(2/pi) is spelled out the way a frontend would emit it, which gives
+# constant folding something to do. Nine elementwise ops act on x.
+graph gelu_chain
+dim M = 1024
+dim N = 4096
+input x : f32[M, N]
+
+const half : f32[] = 0.5
+const one : f32[] = 1.0
+const two : f32[] = 2.0
+const pi : f32[] = 3.14159265358979
+const coef : f32[] = 0.044715
+
+ratio = div two, pi
+c = sqrt ratio
+
+x2 = mul x, x
+x3 = mul x2, x
+t = mul x3, coef
+inner = add x, t
+u = mul inner, c
+th = tanh u
+p = add th, one
+hx = mul x, half
+y = mul hx, p
+
+output y

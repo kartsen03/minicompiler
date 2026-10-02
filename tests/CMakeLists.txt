@@ -5,6 +5,7 @@ add_executable(minicompiler_tests
     test_cpu_backend.cpp
     test_dead_node_elimination.cpp
     test_dot_export.cpp
+    test_end_to_end.cpp
     test_graph.cpp
     test_memory_plan.cpp
     test_operator_fusion.cpp
@@ -14,6 +15,7 @@ add_executable(minicompiler_tests
     test_util.cpp
 )
 target_include_directories(minicompiler_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_compile_definitions(minicompiler_tests PRIVATE MINICOMPILER_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_link_libraries(minicompiler_tests PRIVATE minicompiler minicompiler_flags GTest::gtest_main)
 
 gtest_discover_tests(minicompiler_tests DISCOVERY_TIMEOUT 60)

@@ -1,0 +1,56 @@
+# A transformer-style MLP block in inference mode:
+#   y = x + Linear2(GELU(BatchNorm(Linear1(x))))
+# BatchNorm uses its running statistics, so sqrt(var + eps) is a constant
+# expression, as is GELU's sqrt(2/pi).
+graph mlp_block
+dim B = 128
+dim D = 512
+dim H = 2048
+input x : f32[B, D]
+
+const w1 : f32[D, H] = uniform(seed=11, lo=-0.044, hi=0.044)
+const b1 : f32[H] = uniform(seed=12, lo=-0.1, hi=0.1)
+const mean : f32[H] = uniform(seed=13, lo=-0.1, hi=0.1)
+const var : f32[H] = uniform(seed=14, lo=0.5, hi=1.5)
+const eps : f32[] = 1e-5
+const gamma : f32[H] = uniform(seed=15, lo=0.8, hi=1.2)
+const beta : f32[H] = uniform(seed=16, lo=-0.1, hi=0.1)
+const half : f32[] = 0.5
+const one : f32[] = 1.0
+const two : f32[] = 2.0
+const pi : f32[] = 3.14159265358979
+const coef : f32[] = 0.044715
+const w2 : f32[H, D] = uniform(seed=17, lo=-0.022, hi=0.022)
+const b2 : f32[D] = uniform(seed=18, lo=-0.1, hi=0.1)
+
+# Linear 1
+h = matmul x, w1
+h1 = add h, b1
+
+# BatchNorm: (h1 - mean) / sqrt(var + eps) * gamma + beta
+centered = sub h1, mean
+var_eps = add var, eps
+std = sqrt var_eps
+normed = div centered, std
+scaled = mul normed, gamma
+bn = add scaled, beta
+
+# GELU, tanh approximation
+ratio = div two, pi
+c = sqrt ratio
+g2 = mul bn, bn
+g3 = mul g2, bn
+gt = mul g3, coef
+ginner = add bn, gt
+gu = mul ginner, c
+gth = tanh gu
+gp = add gth, one
+ghx = mul bn, half
+act = mul ghx, gp
+
+# Linear 2 and the residual connection
+o = matmul act, w2
+o1 = add o, b2
+y = add o1, x
+
+output y

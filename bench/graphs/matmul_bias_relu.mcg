@@ -1,0 +1,15 @@
+# One fully connected layer: y = relu(x W + b).
+graph matmul_bias_relu
+dim M = 256
+dim K = 1024
+dim N = 1024
+input x : f32[M, K]
+
+const w : f32[K, N] = uniform(seed=1, lo=-0.03125, hi=0.03125)
+const b : f32[N] = uniform(seed=2, lo=-0.1, hi=0.1)
+
+h = matmul x, w
+hb = add h, b
+y = relu hb
+
+output y
