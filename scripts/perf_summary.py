@@ -50,4 +50,5 @@ def shorten(s: str) -> str:
 for line in sys.stdin:
     parts = line.split(None, 3)  # "40.64%", shared object, "[.]", symbol
     if len(parts) == 4 and parts[0].endswith("%"):
-        print(f"{parts[0]:>7}  {parts[1]:<10} {shorten(parts[3])}")
+        symbol = shorten(parts[3]).removesuffix(" - -")
+        print(f"{parts[0]:>7}  {parts[1]:<10} {symbol}")
