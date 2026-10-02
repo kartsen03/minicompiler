@@ -86,6 +86,18 @@ Result<Shape> broadcast_shapes(const Shape& a, const Shape& b) {
 	return out;
 }
 
+std::vector<std::int64_t> broadcast_strides(const Shape& in, const Shape& out) {
+	std::vector<std::int64_t> strides(out.size(), 0);
+	std::int64_t stride = 1;
+	for (std::size_t i=0; i<in.size(); ++i) {
+		// i counts dimensions from the right.
+		const std::int64_t dim = in[in.size() - 1 - i];
+		strides[out.size() - 1 - i] = dim == 1 ? 0 : stride;
+		stride *= dim;
+	}
+	return strides;
+}
+
 Result<TensorType> infer_result_type(OpKind op, const std::vector<TensorType>& operands) {
 	const int arity = op_arity(op);
 	if (arity <= 0) {

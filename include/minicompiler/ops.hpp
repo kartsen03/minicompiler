@@ -63,6 +63,11 @@ int op_arity(OpKind op);
 // dimensions must be equal or contain a 1.
 Result<Shape> broadcast_shapes(const Shape& a, const Shape& b);
 
+// Element strides for reading a row-major tensor of shape `in` at the
+// coordinates of a shape `out` that it broadcasts to: one stride per output
+// dimension, 0 along dimensions where `in` is broadcast.
+std::vector<std::int64_t> broadcast_strides(const Shape& in, const Shape& out);
+
 // Result type of an elementwise op or MatMul applied to `operands`.
 Result<TensorType> infer_result_type(OpKind op, const std::vector<TensorType>& operands);
 
