@@ -5,11 +5,19 @@
 - Build system: CMake 3.20+
 
 ## Dependencies
-System-installed via apt:
+Taken from the system when installed (apt), otherwise fetched by CMake at a
+pinned version and hash (see `cmake/Dependencies.cmake`):
 - Eigen
 - GoogleTest
-- Google Benchmark
-- Graphviz
+
+Tools, not build dependencies:
+- Graphviz (`dot`) renders the IR diagrams
+- `perf` and FlameGraph for CPU profiling
+- Optional: CUDA toolkit for the CUDA backend
+
+Benchmarks use a small in-repo harness (`bench/harness.hpp`) rather than
+Google Benchmark, so warmup, repetition count and the reported statistic
+(median) are explicit and identical for CPU and CUDA-event timing.
 
 ## Style
 - `snake_case` for functions and variables
