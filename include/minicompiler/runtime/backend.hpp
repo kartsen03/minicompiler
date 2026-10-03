@@ -24,6 +24,12 @@ public:
 	// storage. `outputs` must be a different vector from `inputs`.
 	virtual Status run(const std::vector<HostTensor>& inputs, std::vector<HostTensor>& outputs) = 0;
 
+	// Runs on caller-owned host memory, with no copies and no allocation:
+	// inputs[k] holds the elements of Graph::inputs()[k] and outputs[k] has
+	// room for those of Graph::outputs()[k]. An output may not overlap an input.
+	// The PyTorch benchmark uses this to run on NumPy arrays in place.
+	virtual Status run_buffers(const std::vector<const float*>& inputs, const std::vector<float*>& outputs) = 0;
+
 	// Bytes of intermediate storage held after buffer reuse.
 	virtual std::size_t intermediate_bytes() const = 0;
 };

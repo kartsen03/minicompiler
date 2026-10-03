@@ -240,6 +240,33 @@ TEST(CpuBackend, RejectsTheSameVectorForInputsAndOutputs) {
 	EXPECT_EQ(st.message(), "run() needs separate input and output vectors");
 }
 
+TEST(CpuBackend, RunsOnCallerOwnedBuffers) {
+	Graph g = testutil::make_random_graph(11);
+	auto exe = compile_cpu(g);
+	const auto inputs = make_random_inputs(g, 3);
+	std::vector<HostTensor> expected;
+	ASSERT_TRUE(exe->run(inputs, expected).ok());
+
+	std::vector<const float*> in;
+	for (const HostTensor& t : inputs) in.push_back(t.data.data());
+	std::vector<std::vector<float>> storage;
+	for (const HostTensor& t : expected) storage.emplace_back(t.data.size(), -1.0f);
+	std::vector<float*> out;
+	for (std::vector<float>& s : storage) out.push_back(s.data());
+	ASSERT_TRUE(exe->run_buffers(in, out).ok());
+	for (std::size_t k=0; k<expected.size(); ++k) EXPECT_EQ(storage[k], expected[k].data);
+}
+
+TEST(CpuBackend, RunBuffersRejectsOverlapAndWrongCounts) {
+	Graph g = unary_graph(OpKind::Neg, {8});
+	auto exe = compile_cpu(g);
+	std::vector<float> buf(16, 1.0f);
+	EXPECT_FALSE(exe->run_buffers({buf.data()}, {buf.data() + 4}).ok());  // [4,12) overlaps [0,8)
+	EXPECT_TRUE(exe->run_buffers({buf.data()}, {buf.data() + 8}).ok());   // adjacent is fine
+	EXPECT_EQ(buf[8], -1.0f);
+	EXPECT_FALSE(exe->run_buffers({}, {buf.data()}).ok());
+}
+
 TEST(CpuBackend, RejectsMismatchedInputs) {
 	Graph g = unary_graph(OpKind::Exp, {4});
 	auto exe = compile_cpu(g);
