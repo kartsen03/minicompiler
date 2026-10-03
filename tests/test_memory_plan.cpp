@@ -70,6 +70,28 @@ TEST(MemoryPlan, CanLeaveOutputsToTheCaller) {
 	EXPECT_EQ(plan.bytes_without_reuse, 32u);
 }
 
+TEST(MemoryPlan, FreesTheOperandsOfUnpooledOutputs) {
+	// x -> h1 -> y1 (output) -> h2 -> y2 (output). With outputs left to the
+	// caller, h1 is dead once y1 is computed, so h2 can take its buffer.
+	GraphBuilder b("chained_outputs");
+	NodeId x = b.input("x", {64});
+	NodeId h1 = b.exp(x, "h1");
+	NodeId y1 = b.neg(h1, "y1");
+	NodeId h2 = b.tanh(y1, "h2");
+	NodeId y2 = b.neg(h2, "y2");
+	b.output(y1);
+	b.output(y2);
+	Graph g = std::move(b).build().value();
+
+	PlanOptions options;
+	options.pool_outputs = false;
+	MemoryPlan plan = plan_memory(g, options);
+	EXPECT_EQ(plan.buffer_bytes.size(), 1u);
+	EXPECT_EQ(plan.buffer_of[h2], plan.buffer_of[h1]);
+	EXPECT_EQ(plan.buffer_of[y1], MemoryPlan::kNotPooled);
+	EXPECT_EQ(plan.buffer_of[y2], MemoryPlan::kNotPooled);
+}
+
 TEST(MemoryPlan, DeadValueFreesItsBufferImmediately) {
 	GraphBuilder b("dead");
 	NodeId x = b.input("x", {8});
@@ -101,13 +123,15 @@ TEST(MemoryPlan, GrowsAFreeBufferWhenNoneIsLargeEnough) {
 }
 
 TEST(MemoryPlan, SharedBuffersNeverHoldTwoLiveValuesOnRandomGraphs) {
-	for (std::uint64_t seed=1; seed<=200; ++seed) {
-		Graph g = testutil::make_random_graph(seed, {24, true});
-		MemoryPlan plan = plan_memory(g);
+	for (std::uint64_t seed=1; seed<=400; ++seed) {
+		Graph g = testutil::make_random_graph(seed / 2 + 1, {24, true});
+		PlanOptions options;
+		options.pool_outputs = seed % 2 == 0;  // both modes
+		MemoryPlan plan = plan_memory(g, options);
 		ASSERT_LE(plan.bytes_with_reuse(), plan.bytes_without_reuse) << "seed " << seed;
 		for (NodeId u=0; u<static_cast<NodeId>(g.num_nodes()); ++u) {
 			const std::int32_t buf = plan.buffer_of[u];
-			if (!is_compute(g.node(u).op)) {
+			if (!is_compute(g.node(u).op) || (!options.pool_outputs && g.is_output(u))) {
 				EXPECT_EQ(buf, MemoryPlan::kNotPooled);
 				continue;
 			}
