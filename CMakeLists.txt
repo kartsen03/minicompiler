@@ -38,6 +38,12 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 elseif(MSVC)
     target_compile_options(minicompiler_flags INTERFACE $<$<COMPILE_LANGUAGE:CXX>:/W4 /permissive->)
 endif()
+if(MINGW)
+    # Link the C++ runtime statically: otherwise the program loads whichever
+    # libstdc++-6.dll comes first on PATH (Git for Windows ships an
+    # incompatible one) and crashes at startup.
+    target_link_options(minicompiler_flags INTERFACE -static)
+endif()
 
 include(cmake/Dependencies.cmake)
 
