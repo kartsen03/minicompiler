@@ -56,13 +56,14 @@ def cpu_passes() -> str:
     e = d["environment"]
     rows.append("")
     rows.append(env_line(e, [("cpu", "CPU:"), ("os", "OS:"), ("compiler", "compiler:"), ("eigen", "Eigen"),
-                             ("build_flags", "build:"), ("threads", "threads:"), ("commit", "commit")])
+                             ("build_flags", "build:"), ("threads", "threads:"),
+                             ("host_power_plan", "Windows power plan:"), ("commit", "commit")])
                 + " Median of interleaved runs; see `results/cpu/passes.json` for p10/p90 and the per-pass ablation.")
     return "\n".join(rows)
 
 
-def cpu_torch() -> str:
-    d = load("results/cpu/torch_compare.json")
+def cpu_torch(path: str = "results/cpu/torch_compare.json") -> str:
+    d = load(path)
     if not d:
         return "_Not recorded yet._"
     rows = ["| Graph | Size | minicompiler | PyTorch eager (same ops) | PyTorch eager (idiomatic) | torch.compile |",
@@ -80,11 +81,16 @@ def cpu_torch() -> str:
     rows.append("")
     rows.append("In parentheses: PyTorch time divided by minicompiler time (above 1 means minicompiler is faster). "
                 + env_line(e, [("cpu", "CPU:"), ("torch", "PyTorch"), ("python", "Python"),
-                               ("torch_threads", "threads:"), ("commit", "commit")]))
+                               ("torch_threads", "threads:"), ("malloc_mmap_threshold", "glibc mmap threshold:"),
+                               ("host_power_plan", "Windows power plan:"), ("commit", "commit")]))
     return "\n".join(rows)
 
 
-TABLES = {"cpu-passes": cpu_passes, "cpu-torch": cpu_torch}
+TABLES = {
+    "cpu-passes": cpu_passes,
+    "cpu-torch": cpu_torch,
+    "cpu-torch-tuned": lambda: cpu_torch("results/cpu/torch_compare_tuned_malloc.json"),
+}
 
 
 def main() -> int:
