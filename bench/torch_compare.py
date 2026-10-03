@@ -159,6 +159,10 @@ def environment(device: str, threads: int) -> dict:
         "numpy": numpy.__version__,
         "torch_threads": threads,
         "host_power_plan": os.environ.get("MINICOMPILER_HOST_POWER_PLAN", "unknown"),
+        "inductor_compile_threads": os.environ.get("TORCHINDUCTOR_COMPILE_THREADS"),
+        # glibc returns large freed blocks to the OS by default, so each new
+        # output tensor starts as fresh pages and pays page faults.
+        "malloc_mmap_threshold": os.environ.get("MALLOC_MMAP_THRESHOLD_", "glibc default"),
     }
     if device == "cuda":
         env["gpu"] = torch.cuda.get_device_name()
@@ -181,6 +185,10 @@ def main() -> int:
     # Must be set before torch starts its thread pools.
     os.environ.setdefault("OMP_NUM_THREADS", str(args.threads))
     os.environ.setdefault("MKL_NUM_THREADS", str(args.threads))
+    # Compile in this process. Inductor otherwise starts a pool of compile
+    # workers that stay alive and, under taskset, share the timed core: they
+    # slowed every later measurement, minicompiler's included, by 1.5-2x.
+    os.environ.setdefault("TORCHINDUCTOR_COMPILE_THREADS", "1")
     import numpy as np
     import torch
 
