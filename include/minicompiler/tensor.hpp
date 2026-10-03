@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <ostream>
 #include <string>
 #include <utility>
@@ -41,6 +42,26 @@ inline const char* dtype_name(DType dt) {
 
 using Shape = std::vector<std::int64_t>;
 
+// Largest element count a tensor may have. The CUDA kernels index elements
+// with 32-bit integers, so every backend shares this limit.
+inline constexpr std::size_t kMaxElements = (std::size_t{1} << 31) - 1;
+
+// The element count of `shape`, or nullopt if a dimension is below 1 or the
+// count would exceed kMaxElements. Shapes from outside (graph files, builder
+// calls) go through this before anything is allocated, so a huge shape is an
+// error instead of an overflowed, too-small allocation.
+inline std::optional<std::size_t> checked_num_elements(const Shape& shape) {
+	std::size_t n = 1;
+	for (std::int64_t d : shape) {
+		if (d < 1) return std::nullopt;
+		const auto dim = static_cast<std::size_t>(d);
+		if (n > kMaxElements / dim) return std::nullopt;
+		n *= dim;
+	}
+	return n;
+}
+
+// Element count of a shape already known to be valid (see checked_num_elements).
 inline std::size_t num_elements(const Shape& shape) {
 	std::size_t n = 1;
 	for (std::int64_t d : shape) {

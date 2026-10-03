@@ -304,6 +304,11 @@ Result<TensorType> GraphParser::parse_type(Cursor& c) {
 	} while (c.accept_punct(','));
 	st = c.expect_punct(']');
 	if (!st.ok()) return st.error();
+	// Checked here, before a constant's initializer allocates its values.
+	if (!checked_num_elements(shape)) {
+		return Error{"invalid shape " + to_string(shape) +
+		             ": dimensions must be >= 1 and the total at most 2^31 - 1 elements"};
+	}
 	return TensorType(shape);
 }
 

@@ -82,6 +82,17 @@ TEST(Parser, ReportsErrorsWithLineNumbers) {
 	EXPECT_EQ(err.rfind("line 3: c: add: cannot broadcast", 0), 0u) << err;
 }
 
+TEST(Parser, RejectsInvalidShapesBeforeAllocating) {
+	EXPECT_EQ(parse_error("const c : f32[-1] = 0\noutput c"),
+	          "line 1: invalid shape [-1]: dimensions must be >= 1 and the total at most 2^31 - 1 elements");
+	for (const char* text : {"const c : f32[-1] = uniform(seed=1, lo=0, hi=1)\noutput c",
+	                         "input x : f32[7, 7905747460161236407]\noutput x",
+	                         "const c : f32[4294967296, 4294967296] = 1\noutput c",
+	                         "input x : f32[4, 0]\noutput x"}) {
+		EXPECT_EQ(parse_error(text).rfind("line 1: invalid shape", 0), 0u) << text;
+	}
+}
+
 TEST(Parser, IgnoresCommentsBlankLinesAndCarriageReturns) {
 	Result<Graph> g = parse_graph("# header\r\n\r\ninput x : f32[2]   # trailing\r\ny = exp x\r\noutput y\r\n");
 	ASSERT_TRUE(g.ok()) << g.error().message;

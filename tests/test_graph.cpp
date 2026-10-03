@@ -68,6 +68,19 @@ TEST(Graph, RejectsInvalidNodes) {
 	EXPECT_FALSE(g.add_output(x).ok());  // duplicate
 }
 
+TEST(Graph, RejectsTensorsWithTooManyElements) {
+	Graph g;
+	// 7 * 7905747460161236407 wraps around to 1 in 64-bit arithmetic.
+	EXPECT_FALSE(g.add_input("x", TensorType({7, 7905747460161236407})).ok());
+	EXPECT_FALSE(g.add_constant("c", TensorType({4294967296, 4294967296}), std::vector<float>{}).ok());
+	// Operands within the limit can still produce a result beyond it.
+	NodeId col = g.add_input("col", TensorType({65536, 1})).value();
+	NodeId row = g.add_input("row", TensorType({1, 65536})).value();
+	EXPECT_FALSE(g.add_op(OpKind::Add, {col, row}).ok());     // [65536,65536] is 2^32 elements
+	EXPECT_FALSE(g.add_op(OpKind::MatMul, {col, row}).ok());
+	EXPECT_TRUE(g.add_input("largest", TensorType({46340, 46340})).ok());  // 2147395600 < 2^31 - 1
+}
+
 TEST(Graph, BuilderErrorsAreSticky) {
 	GraphBuilder b("g");
 	NodeId x = b.input("x", {4, 8});

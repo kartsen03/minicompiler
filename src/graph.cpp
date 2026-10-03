@@ -12,6 +12,9 @@ Status check_type(const TensorType& type, const std::string& what) {
 	for (std::int64_t d : type.shape) {
 		if (d < 1) return Error{what + ": dimensions must be >= 1, got " + to_string(type)};
 	}
+	if (!checked_num_elements(type.shape)) {
+		return Error{what + ": " + to_string(type) + " has more than 2^31 - 1 elements"};
+	}
 	return Status();
 }
 
@@ -93,6 +96,9 @@ Result<NodeId> Graph::add_op(OpKind op, std::vector<NodeId> inputs, std::string 
 	if (!type.ok()) {
 		return Error{(name.empty() ? std::string(op_name(op)) : name) + ": " + type.error().message};
 	}
+	// Broadcasting or a matmul can produce a larger result than any operand.
+	st = check_type(type.value(), name.empty() ? std::string(op_name(op)) : name);
+	if (!st.ok()) return st.error();
 	Node n;
 	n.op = op;
 	n.name = std::move(name);
@@ -210,6 +216,8 @@ Status Graph::verify() const {
 				break;
 			}
 			default: {
+				Status st = check_type(n.type, what);
+				if (!st.ok()) return st;
 				Result<TensorType> t = infer_result_type(n.op, operand_types);
 				if (!t.ok()) return Error{what + ": " + t.error().message};
 				if (t.value() != n.type) {
