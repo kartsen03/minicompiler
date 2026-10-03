@@ -93,6 +93,14 @@ TEST(Parser, RejectsInvalidShapesBeforeAllocating) {
 	}
 }
 
+TEST(Parser, KeepsLargeSeedsExact) {
+	// 2^53 and 2^53 + 1 are the same double; the seed must stay an integer.
+	Graph a = parse_graph("const c : f32[8] = uniform(seed=9007199254740992, lo=0, hi=1)\noutput c").value();
+	Graph b = parse_graph("const c : f32[8] = uniform(seed=9007199254740993, lo=0, hi=1)\noutput c").value();
+	EXPECT_NE(*a.node(0).constant, *b.node(0).constant);
+	EXPECT_EQ(*b.node(0).constant, uniform_values(8, 9007199254740993ULL, 0.0f, 1.0f));
+}
+
 TEST(Parser, IgnoresCommentsBlankLinesAndCarriageReturns) {
 	Result<Graph> g = parse_graph("# header\r\n\r\ninput x : f32[2]   # trailing\r\ny = exp x\r\noutput y\r\n");
 	ASSERT_TRUE(g.ok()) << g.error().message;

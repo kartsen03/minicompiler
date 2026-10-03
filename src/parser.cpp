@@ -338,7 +338,8 @@ Result<std::vector<float>> GraphParser::parse_init(Cursor& c, const TensorType& 
 	if (fn.value() != "uniform") return Error{"unknown initializer '" + fn.value() + "'"};
 	Status st = c.expect_punct('(');
 	if (!st.ok()) return st.error();
-	std::map<std::string, double> args;
+	std::optional<std::uint64_t> seed;
+	std::map<std::string, double> bounds;
 	do {
 		Result<std::string> key = c.ident("seed, lo or hi");
 		if (!key.ok()) return key.error();
@@ -348,23 +349,23 @@ Result<std::vector<float>> GraphParser::parse_init(Cursor& c, const TensorType& 
 		st = c.expect_punct('=');
 		if (!st.ok()) return st.error();
 		if (key.value() == "seed") {
-			Result<std::int64_t> seed = c.integer("a seed");
-			if (!seed.ok()) return seed.error();
-			if (seed.value() < 0) return Error{"seed must be >= 0"};
-			args["seed"] = static_cast<double>(seed.value());
+			Result<std::int64_t> s = c.integer("a seed");
+			if (!s.ok()) return s.error();
+			if (s.value() < 0) return Error{"seed must be >= 0"};
+			seed = static_cast<std::uint64_t>(s.value());  // kept as an integer: a double loses bits above 2^53
 		} else {
 			Result<double> v = c.number("a bound");
 			if (!v.ok()) return v.error();
-			args[key.value()] = v.value();
+			bounds[key.value()] = v.value();
 		}
 	} while (c.accept_punct(','));
 	st = c.expect_punct(')');
 	if (!st.ok()) return st.error();
-	if (args.size() != 3) return Error{"uniform() needs seed, lo and hi"};
-	const float lo = static_cast<float>(args["lo"]);
-	const float hi = static_cast<float>(args["hi"]);
+	if (!seed || bounds.size() != 2) return Error{"uniform() needs seed, lo and hi"};
+	const float lo = static_cast<float>(bounds["lo"]);
+	const float hi = static_cast<float>(bounds["hi"]);
 	if (!(lo < hi)) return Error{"uniform() needs lo < hi"};
-	return uniform_values(n, static_cast<std::uint64_t>(args["seed"]), lo, hi);
+	return uniform_values(n, *seed, lo, hi);
 }
 
 Result<NodeId> GraphParser::lookup(const std::string& name) const {
