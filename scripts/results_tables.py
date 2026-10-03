@@ -36,6 +36,11 @@ def ms(v: float) -> str:
     return f"{v:.4f}"
 
 
+def ratio(s: dict) -> str:
+    """'2.92x (2.61-3.10)': median across runs, then the range."""
+    return f"{s['median']:.2f}x ({s['min']:.2f}–{s['max']:.2f})"
+
+
 def env_line(env: dict, keys: list[tuple[str, str]]) -> str:
     parts = [f"{label} {env[k]}" for k, label in keys if k in env]
     return "Measured on " + ", ".join(parts) + "."
@@ -45,20 +50,23 @@ def cpu_passes() -> str:
     d = load("results/cpu/passes.json")
     if not d:
         return "_No results recorded yet._"
-    rows = ["| Graph | Size | Nodes | Compute nodes | Passes off | Passes on | Speedup |",
+    rows = ["| Graph | Size | Nodes | Compute nodes | Passes off | Passes on | Speedup (range over runs) |",
             "|---|---|---:|---:|---:|---:|---:|"]
     for r in d["results"]:
         v = {x["variant"]: x for x in r["variants"]}
         none, full = v["none"], v["all"]
         rows.append(f"| `{r['graph']}` | {r['size']} | {none['nodes']} → {full['nodes']} | "
-                    f"{none['compute_nodes']} → {full['compute_nodes']} | {ms(none['timing']['median_ms'])} ms | "
-                    f"{ms(full['timing']['median_ms'])} ms | {full['speedup_vs_none']:.2f}x |")
+                    f"{none['compute_nodes']} → {full['compute_nodes']} | {ms(none['median_ms']['median'])} ms | "
+                    f"{ms(full['median_ms']['median'])} ms | {ratio(full['speedup_paired'])} |")
     e = d["environment"]
     rows.append("")
-    rows.append(env_line(e, [("cpu", "CPU:"), ("os", "OS:"), ("compiler", "compiler:"), ("eigen", "Eigen"),
-                             ("build_flags", "build:"), ("threads", "threads:"),
-                             ("host_power_plan", "Windows power plan:"), ("commit", "commit")])
-                + " Median of interleaved runs; see `results/cpu/passes.json` for p10/p90 and the per-pass ablation.")
+    rows.append(f"Each of {d['runs']} runs times the variants in interleaved rounds; a run's speedup is the median "
+                "over rounds of (passes-off time / passes-on time) within a round. The table shows the median "
+                "across runs, the range across runs, and median times. "
+                + env_line(e, [("cpu", "CPU:"), ("os", "OS:"), ("compiler", "compiler:"), ("eigen", "Eigen"),
+                               ("build_flags", "build:"), ("threads", "threads:"),
+                               ("host_power_plan", "Windows power plan:"), ("commit", "commit")])
+                + " Raw runs and the per-pass ablation: `results/cpu/`.")
     return "\n".join(rows)
 
 
@@ -70,16 +78,17 @@ def cpu_torch(path: str = "results/cpu/torch_compare.json") -> str:
             "|---|---|---:|---:|---:|---:|"]
     for r in d["results"]:
         def cell(key: str) -> str:
-            t = r[key]["timing"]["median_ms"]
-            mc = r["minicompiler"]["timing"]["median_ms"]
+            t = ms(r[key]["median_ms"]["median"])
             if key == "minicompiler":
-                return f"{ms(t)} ms"
-            return f"{ms(t)} ms ({t / mc:.2f}x)"
+                return f"{t} ms"
+            return f"{t} ms, {ratio(r[key]['ratio_to_minicompiler'])}"
         rows.append(f"| `{r['graph']}` | {r['size']} | {cell('minicompiler')} | {cell('eager')} | "
                     f"{cell('eager_idiomatic')} | {cell('compile')} |")
     e = d["environment"]
     rows.append("")
-    rows.append("In parentheses: PyTorch time divided by minicompiler time (above 1 means minicompiler is faster). "
+    rows.append(f"Ratios are PyTorch time / minicompiler time (above 1 means minicompiler is faster): within each of "
+                f"{d['runs']} runs, the median over interleaved rounds; shown as the median across runs with the "
+                "range across runs. "
                 + env_line(e, [("cpu", "CPU:"), ("torch", "PyTorch"), ("python", "Python"),
                                ("torch_threads", "threads:"), ("malloc_mmap_threshold", "glibc mmap threshold:"),
                                ("host_power_plan", "Windows power plan:"), ("commit", "commit")]))

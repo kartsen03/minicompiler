@@ -9,10 +9,13 @@
 #                                    tensor (minicompiler reuses its buffers)
 # The PyTorch runs need a Python with torch (set PYTHON=...).
 #
-# Everything runs pinned to one core (CORE, default 2), single-threaded. Both
-# benchmarks time their variants interleaved within one process and report the
-# median of per-round ratios, because a laptop core's speed drifts by up to 2x
-# over a minute. Each result file records the commit, with -dirty if code was
+# Everything runs pinned to one core (CORE, default 2), single-threaded. Each
+# benchmark times its variants interleaved within one process and reports the
+# median of per-round ratios, which is robust to a core's speed drifting during
+# a run. Ratios still differ between runs as the machine's state changes, so
+# the whole sequence is repeated RUNS times (default 3); every raw run is kept
+# under results/cpu/runs/ and the summaries give the median across runs with
+# the min-max range. Each file records the commit, with -dirty if code was
 # uncommitted.
 #
 #   scripts/run_cpu_benchmarks.sh
@@ -21,6 +24,7 @@ cd "$(dirname "$0")/.."
 BUILD_DIR=${BUILD_DIR:-build}
 CORE=${CORE:-2}
 PYTHON=${PYTHON:-python3}
+RUNS=${RUNS:-3}
 
 export MINICOMPILER_COMMIT="$(git rev-parse --short HEAD)$(git diff --quiet -- . ':!results' || echo -dirty)"
 # Under WSL, record the Windows power plan: laptop power modes cap clocks.
@@ -31,16 +35,32 @@ if command -v powershell.exe > /dev/null; then
 fi
 cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release > /dev/null
 cmake --build "$BUILD_DIR" -j "$(nproc)" --target bench_cpu minicompiler_capi > /dev/null
-mkdir -p results/cpu
 
-taskset -c "$CORE" "$BUILD_DIR/bench/bench_cpu" --out results/cpu/passes.json
-
-if ! "$PYTHON" -c "import torch" 2> /dev/null; then
+with_torch=1
+"$PYTHON" -c "import torch" 2> /dev/null || {
+    with_torch=0
     echo "skipping the PyTorch comparison: '$PYTHON' cannot import torch" >&2
-    exit 0
-fi
+}
 compare() {  # output file
     taskset -c "$CORE" "$PYTHON" bench/torch_compare.py --capi "$BUILD_DIR/bench/libminicompiler_capi.so" --out "$1"
 }
-compare results/cpu/torch_compare.json
-MALLOC_MMAP_THRESHOLD_=4294967296 MALLOC_TRIM_THRESHOLD_=68719476736 compare results/cpu/torch_compare_tuned_malloc.json
+
+RAW=results/cpu/runs
+rm -rf "$RAW"
+mkdir -p "$RAW"
+for run in $(seq 1 "$RUNS"); do
+    echo "=== run $run of $RUNS"
+    taskset -c "$CORE" "$BUILD_DIR/bench/bench_cpu" --out "$RAW/passes_$run.json"
+    if [ "$with_torch" = 1 ]; then
+        compare "$RAW/torch_compare_$run.json"
+        MALLOC_MMAP_THRESHOLD_=4294967296 MALLOC_TRIM_THRESHOLD_=68719476736 \
+            compare "$RAW/torch_compare_tuned_malloc_$run.json"
+    fi
+done
+
+"$PYTHON" scripts/aggregate_results.py passes results/cpu/passes.json "$RAW"/passes_*.json
+if [ "$with_torch" = 1 ]; then
+    "$PYTHON" scripts/aggregate_results.py torch results/cpu/torch_compare.json "$RAW"/torch_compare_[0-9]*.json
+    "$PYTHON" scripts/aggregate_results.py torch results/cpu/torch_compare_tuned_malloc.json \
+        "$RAW"/torch_compare_tuned_malloc_*.json
+fi
