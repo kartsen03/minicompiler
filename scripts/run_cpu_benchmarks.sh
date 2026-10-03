@@ -9,10 +9,11 @@
 #                                    tensor (minicompiler reuses its buffers)
 # The PyTorch runs need a Python with torch (set PYTHON=...).
 #
-# Everything runs pinned to one core (CORE, default 2), single-threaded. Each
-# result file records the commit, with -dirty if code was uncommitted. The run
-# fails if minicompiler's timings inside the PyTorch runs drift more than 25%
-# from bench_cpu's: that means something else was competing for the core.
+# Everything runs pinned to one core (CORE, default 2), single-threaded. Both
+# benchmarks time their variants interleaved within one process and report the
+# median of per-round ratios, because a laptop core's speed drifts by up to 2x
+# over a minute. Each result file records the commit, with -dirty if code was
+# uncommitted.
 #
 #   scripts/run_cpu_benchmarks.sh
 set -euo pipefail
@@ -29,7 +30,7 @@ if command -v powershell.exe > /dev/null; then
     export MINICOMPILER_HOST_POWER_PLAN
 fi
 cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release > /dev/null
-cmake --build "$BUILD_DIR" -j "$(nproc)" --target bench_cpu mcc > /dev/null
+cmake --build "$BUILD_DIR" -j "$(nproc)" --target bench_cpu minicompiler_capi > /dev/null
 mkdir -p results/cpu
 
 taskset -c "$CORE" "$BUILD_DIR/bench/bench_cpu" --out results/cpu/passes.json
@@ -39,9 +40,7 @@ if ! "$PYTHON" -c "import torch" 2> /dev/null; then
     exit 0
 fi
 compare() {  # output file
-    taskset -c "$CORE" "$PYTHON" bench/torch_compare.py --mcc "$BUILD_DIR/tools/mcc" --device cpu --out "$1"
+    taskset -c "$CORE" "$PYTHON" bench/torch_compare.py --capi "$BUILD_DIR/bench/libminicompiler_capi.so" --out "$1"
 }
 compare results/cpu/torch_compare.json
 MALLOC_MMAP_THRESHOLD_=4294967296 MALLOC_TRIM_THRESHOLD_=68719476736 compare results/cpu/torch_compare_tuned_malloc.json
-"$PYTHON" scripts/check_timing_consistency.py results/cpu/passes.json \
-    results/cpu/torch_compare.json results/cpu/torch_compare_tuned_malloc.json

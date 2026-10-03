@@ -102,12 +102,13 @@ int main(int argc, char** argv) {
 	json.begin_object();
 	json.field("benchmark", "passes off vs on, Eigen CPU backend");
 	json.field("method", "interleaved rounds (one run per variant per round, rotating order) after 5 warmup runs "
-	                     "each; median of the rounds");
+	                     "each; timing = median over rounds; speedup_paired = median over rounds of "
+	                     "(unoptimized time / variant time) within the same round");
 	bench::write_environment(json);
 	json.key("results").begin_array();
 
 	std::printf("%-17s %-24s %-9s %7s %8s %11s %9s\n", "graph", "size", "variant", "nodes", "compute", "median ms",
-	            "speedup");
+	            "paired speedup");
 	for (const Config& cfg : kConfigs) {
 		ParseOptions parse;
 		parse.dims = cfg.dims;
@@ -164,6 +165,14 @@ int main(int argc, char** argv) {
 			const bench::TimingStats t = bench::summarize(c.samples_ms, 5);
 			const GraphStats s = compute_stats(c.graph);
 			const double diff = normwise_diff(c.outputs, variants[0].outputs);
+			// Speedup per round (unoptimized time / this variant's time in the
+			// same round). A core's speed can drift by 2x over a minute on a
+			// laptop; within a round both runs see the same conditions, so the
+			// median of these ratios is the robust estimate.
+			std::vector<double> paired;
+			for (std::size_t r=0; r<c.samples_ms.size(); ++r) paired.push_back(variants[0].samples_ms[r] / c.samples_ms[r]);
+			std::sort(paired.begin(), paired.end());
+			const double paired_median = bench::percentile(paired, 0.5);
 			json.begin_object();
 			json.field("variant", kVariants[j].name).field("passes", kVariants[j].passes);
 			json.field("nodes", s.nodes).field("compute_nodes", s.compute_nodes);
@@ -172,9 +181,12 @@ int main(int argc, char** argv) {
 			json.field("max_normwise_diff_vs_none", diff);
 			json.timing("timing", t);
 			json.field("speedup_vs_none", base / t.median_ms);
+			json.key("speedup_paired").begin_object();
+			json.field("median", paired_median).field("p10", bench::percentile(paired, 0.1));
+			json.field("p90", bench::percentile(paired, 0.9)).end_object();
 			json.end_object();
 			std::printf("%-17s %-24s %-9s %7zu %8zu %11.4f %8.2fx%s\n", cfg.graph, cfg.size, kVariants[j].name, s.nodes,
-			            s.compute_nodes, t.median_ms, base / t.median_ms, diff > 1e-5 ? "  OUTPUT MISMATCH" : "");
+			            s.compute_nodes, t.median_ms, paired_median, diff > 1e-5 ? "  OUTPUT MISMATCH" : "");
 			if (diff > 1e-5) {
 				std::cerr << "optimized outputs differ from the unoptimized ones by " << diff << "\n";
 				return 1;

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """minicompiler against PyTorch eager and torch.compile on the same graphs.
 
-For each benchmark graph and size, four ways to compute the same function:
+For each benchmark graph and size, four ways to compute the same function, all
+in this one process, on the same seeded inputs:
 
-  minicompiler     `mcc --bench` with all passes; timed inside mcc
+  minicompiler     the graph compiled with all passes for the Eigen CPU
+                   backend, run on the NumPy arrays through bench/capi.cpp
+                   (ctypes, no copies)
   eager            PyTorch running the graph op by op, exactly as written
                    (bench/mcgraph.py turns the .mcg file into Python)
   eager_idiomatic  the same function written the way a PyTorch user would,
@@ -11,24 +14,27 @@ For each benchmark graph and size, four ways to compute the same function:
                    torch.addmm, F.batch_norm
   compile          torch.compile (Inductor, default mode) of the op-by-op function
 
-Every variant is timed the same way (warmup runs, then individually timed
-runs, median reported) on identical seeded inputs, and its outputs are
-checked against minicompiler's. CPU runs are single-threaded on both sides
-by default, because minicompiler's Eigen backend uses one thread.
+Timing is interleaved: after warmup, each round runs every variant once in
+rotating order. On a laptop a core's speed drifts (the same workload ran at
+~1.1 ms, then 2-3 ms, then ~1.5 ms within one minute here), so runs taken at
+different times cannot be compared. Within a round all variants see the same
+conditions, so each round gives a ratio PyTorch time / minicompiler time, and
+the median of those ratios is the headline comparison. Every variant's output
+is checked against minicompiler's.
 
-    python bench/torch_compare.py --mcc build/tools/mcc --out results/cpu/torch_compare.json
+    python bench/torch_compare.py --capi build/bench/libminicompiler_capi.so \\
+        --out results/cpu/torch_compare.json
 """
 
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import os
 import platform
 import statistics
-import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -46,55 +52,61 @@ CONFIGS = [
     ("mlp_block", {"B": 128, "D": 512, "H": 2048}, "B=128, 512->2048->512"),
     ("mlp_block", {"B": 512, "D": 512, "H": 2048}, "B=512, 512->2048->512"),
 ]
+VARIANTS = ["minicompiler", "eager", "eager_idiomatic", "compile"]
+
+
+def percentile(sorted_values: list[float], q: float) -> float:
+    pos = q * (len(sorted_values) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_values) - 1)
+    return sorted_values[lo] + (pos - lo) * (sorted_values[hi] - sorted_values[lo])
 
 
 def summarize(samples_ms: list[float], warmup: int) -> dict:
     s = sorted(samples_ms)
-
-    def pct(q: float) -> float:
-        pos = q * (len(s) - 1)
-        lo = int(pos)
-        hi = min(lo + 1, len(s) - 1)
-        return s[lo] + (pos - lo) * (s[hi] - s[lo])
-
-    return {
-        "warmup": warmup,
-        "reps": len(s),
-        "median_ms": pct(0.5),
-        "min_ms": s[0],
-        "p10_ms": pct(0.1),
-        "p90_ms": pct(0.9),
-        "mean_ms": statistics.fmean(s),
-    }
+    return {"warmup": warmup, "reps": len(s), "median_ms": percentile(s, 0.5), "min_ms": s[0],
+            "p10_ms": percentile(s, 0.1), "p90_ms": percentile(s, 0.9), "mean_ms": statistics.fmean(s)}
 
 
-def reps_for(single_ms: float, seconds: float) -> int:
-    return max(20, min(2000, int(seconds * 1000.0 / max(single_ms, 1e-3))))
+class Minicompiler:
+    """A graph compiled through bench/capi.cpp, run on NumPy buffers in place."""
+
+    def __init__(self, lib, path: Path, dims: dict, inputs, output_shapes):
+        import numpy as np
+
+        error = ctypes.create_string_buffer(1024)
+        spec = ",".join(f"{k}={v}" for k, v in dims.items()).encode()
+        self.lib = lib
+        self.handle = lib.mc_compile(str(path).encode(), spec, b"default", error, len(error))
+        if not self.handle:
+            raise RuntimeError(error.value.decode())
+        self.inputs = [np.ascontiguousarray(a, dtype=np.float32) for a in inputs]  # kept alive
+        self.outputs = [np.empty(shape, dtype=np.float32) for shape in output_shapes]
+        for k, out in enumerate(self.outputs):
+            if lib.mc_output_elements(self.handle, k) != out.size:
+                raise RuntimeError(f"output {k} size mismatch")
+        self.in_ptrs = (ctypes.c_void_p * len(self.inputs))(*[a.ctypes.data for a in self.inputs])
+        self.out_ptrs = (ctypes.c_void_p * len(self.outputs))(*[o.ctypes.data for o in self.outputs])
+
+    def __call__(self):
+        if self.lib.mc_run(self.handle, self.in_ptrs, self.out_ptrs) != 0:
+            raise RuntimeError("mc_run failed")
+        return self.outputs
+
+    def close(self):
+        self.lib.mc_release(self.handle)
 
 
-def time_torch(fn, args, device: str, warmup: int, seconds: float) -> dict:
-    import torch
-
-    def once() -> float:
-        if device == "cuda":
-            start = torch.cuda.Event(enable_timing=True)
-            end = torch.cuda.Event(enable_timing=True)
-            start.record()
-            fn(*args)
-            end.record()
-            end.synchronize()
-            return start.elapsed_time(end)
-        t0 = time.perf_counter_ns()
-        fn(*args)
-        return (time.perf_counter_ns() - t0) / 1e6
-
-    for _ in range(warmup):
-        fn(*args)
-    if device == "cuda":
-        torch.cuda.synchronize()
-    probe = statistics.median(once() for _ in range(5))
-    samples = [once() for _ in range(reps_for(probe, seconds))]
-    return summarize(samples, warmup)
+def load_capi(path: str):
+    lib = ctypes.CDLL(path)
+    lib.mc_compile.restype = ctypes.c_void_p
+    lib.mc_compile.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+    lib.mc_output_elements.restype = ctypes.c_longlong
+    lib.mc_output_elements.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    lib.mc_run.restype = ctypes.c_int
+    lib.mc_run.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p]
+    lib.mc_release.argtypes = [ctypes.c_void_p]
+    return lib
 
 
 def idiomatic_fn(name: str, scope: dict):
@@ -132,13 +144,30 @@ def normwise_diff(actual, expected) -> float:
     return worst
 
 
-def run_mcc(mcc: str, graph: Path, dims: dict, backend: str, extra: list[str]) -> dict:
-    cmd = [mcc, str(graph), "--backend", backend] + [a for k, v in dims.items() for a in ("--dim", f"{k}={v}")]
-    out = subprocess.run(cmd + extra, check=True, capture_output=True, text=True).stdout
-    return json.loads(out) if "--bench" in extra else {}
+def time_interleaved(fns: dict, warmup: int, seconds: float) -> dict[str, list[float]]:
+    """Warms every function up, then runs rounds of one call each, rotating the
+    order every round. Returns the per-round times in ms for each function."""
+    names = list(fns)
+    for fn in fns.values():
+        for _ in range(warmup):
+            fn()
+
+    def timed(fn) -> float:
+        t0 = time.perf_counter_ns()
+        fn()
+        return (time.perf_counter_ns() - t0) / 1e6
+
+    probe = sum(statistics.median(timed(fns[n]) for _ in range(3)) for n in names)
+    rounds = max(20, min(2000, int(seconds * 1000.0 / max(probe, 1e-3))))
+    samples = {n: [] for n in names}
+    for r in range(rounds):
+        for i in range(len(names)):
+            n = names[(i + r) % len(names)]
+            samples[n].append(timed(fns[n]))
+    return samples
 
 
-def environment(device: str, threads: int) -> dict:
+def environment(threads: int) -> dict:
     import numpy
     import torch
 
@@ -150,12 +179,13 @@ def environment(device: str, threads: int) -> dict:
                 break
     except OSError:
         pass
-    env = {
+    return {
         "commit": os.environ.get("MINICOMPILER_COMMIT", "unknown"),
         "cpu": cpu,
         "os": platform.platform(),
         "python": platform.python_version(),
         "torch": torch.__version__,
+        "torch_cpu_capability": torch.backends.cpu.get_cpu_capability(),
         "numpy": numpy.__version__,
         "torch_threads": threads,
         "host_power_plan": os.environ.get("MINICOMPILER_HOST_POWER_PLAN", "unknown"),
@@ -164,19 +194,13 @@ def environment(device: str, threads: int) -> dict:
         # output tensor starts as fresh pages and pays page faults.
         "malloc_mmap_threshold": os.environ.get("MALLOC_MMAP_THRESHOLD_", "glibc default"),
     }
-    if device == "cuda":
-        env["gpu"] = torch.cuda.get_device_name()
-        env["torch_cuda"] = torch.version.cuda
-        env["torch_matmul_tf32"] = torch.backends.cuda.matmul.allow_tf32
-    return env
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--mcc", required=True, help="path to the mcc binary")
-    ap.add_argument("--device", choices=["cpu", "cuda"], default="cpu")
-    ap.add_argument("--threads", type=int, default=1, help="PyTorch intra-op threads on CPU (default 1)")
-    ap.add_argument("--seconds", type=float, default=2.0, help="timing budget per variant and config")
+    ap.add_argument("--capi", required=True, help="path to libminicompiler_capi.so")
+    ap.add_argument("--threads", type=int, default=1, help="PyTorch intra-op threads (default 1, like Eigen here)")
+    ap.add_argument("--seconds", type=float, default=8.0, help="timing budget per config, all variants together")
     ap.add_argument("--warmup", type=int, default=10)
     ap.add_argument("--only", help="run only this graph")
     ap.add_argument("--out", required=True)
@@ -185,82 +209,74 @@ def main() -> int:
     # Must be set before torch starts its thread pools.
     os.environ.setdefault("OMP_NUM_THREADS", str(args.threads))
     os.environ.setdefault("MKL_NUM_THREADS", str(args.threads))
-    # Compile in this process. Inductor otherwise starts a pool of compile
-    # workers that stay alive and, under taskset, share the timed core: they
-    # slowed every later measurement, minicompiler's included, by 1.5-2x.
+    # Compile in this process instead of in a pool of worker processes that
+    # would stay alive and compete for the timed core.
     os.environ.setdefault("TORCHINDUCTOR_COMPILE_THREADS", "1")
-    import numpy as np
     import torch
 
     import mcgraph
 
     torch.set_num_threads(args.threads)
-    torch.backends.cuda.matmul.allow_tf32 = False  # compare FP32 with FP32
-    torch.backends.cudnn.allow_tf32 = False
-    backend = "cuda" if args.device == "cuda" else "cpu"
+    lib = load_capi(args.capi)
 
     results = []
-    print(f"{'graph':17} {'size':24} {'minicompiler':>13} {'eager':>10} {'idiomatic':>10} {'compile':>10}  (median ms)")
+    print(f"{'graph':17} {'size':24} {'minicompiler':>12}   PyTorch / minicompiler (median of per-round ratios)")
+    print(f"{'':17} {'':24} {'median ms':>12}   {'eager':>8} {'idiomatic':>10} {'compile':>8}")
     for name, dims, size in CONFIGS:
         if args.only and name != args.only:
             continue
         path = HERE / "graphs" / f"{name}.mcg"
         g = mcgraph.parse(str(path), dims)
         inputs_np = mcgraph.random_inputs(g, seed=1)
-        inputs = [torch.from_numpy(a).to(args.device) for a in inputs_np]
+        inputs = [torch.from_numpy(a) for a in inputs_np]
 
-        # minicompiler: dump outputs for the cross-check, then benchmark.
-        with tempfile.TemporaryDirectory() as tmp:
-            dump = Path(tmp) / "out.bin"
-            probe = run_mcc(args.mcc, path, dims, backend, ["--seed", "1", "--dump-outputs", str(dump),
-                                                            "--bench", "--warmup", "3", "--reps", "5"])
-            flat = np.fromfile(dump, dtype=np.float32)
-        reps = reps_for(probe["timing"]["median_ms"], args.seconds)
-        mc = run_mcc(args.mcc, path, dims, backend, ["--seed", "1", "--bench", "--warmup", str(args.warmup),
-                                                     "--reps", str(reps)])
-        mc_outputs, offset = [], 0
         with torch.inference_mode():
-            eager_fn, scope = mcgraph.build_torch_fn(g, args.device)
-            expected_shapes = [t.shape for t in eager_fn(*inputs)]
-        for shape in expected_shapes:
-            n = int(np.prod(shape))
-            mc_outputs.append(flat[offset:offset + n].reshape(shape))
-            offset += n
-
-        entry = {"graph": name, "size": size, "dims": dims, "minicompiler": {
-            "timing": mc["timing"], "optimized_stats": mc["optimized_stats"], "input_stats": mc["input_stats"]}}
-        with torch.inference_mode():
-            variants = {
-                "eager": eager_fn,
-                "eager_idiomatic": idiomatic_fn(name, scope),
+            eager_fn, scope = mcgraph.build_torch_fn(g, "cpu")
+            reference = [t.numpy().copy() for t in eager_fn(*inputs)]
+            mc = Minicompiler(lib, path, dims, inputs_np, [r.shape for r in reference])
+            fns = {
+                "minicompiler": mc,
+                "eager": lambda f=eager_fn: f(*inputs),
+                "eager_idiomatic": lambda f=idiomatic_fn(name, scope): f(*inputs),
             }
             t0 = time.perf_counter()
             compiled = torch.compile(eager_fn, dynamic=False, fullgraph=True)
             compiled(*inputs)  # compiles
             compile_seconds = time.perf_counter() - t0
-            variants["compile"] = compiled
-            for vname, fn in variants.items():
-                outs = [t.float().cpu().numpy() for t in fn(*inputs)]
-                diff = normwise_diff(outs, mc_outputs)
-                entry[vname] = {"timing": time_torch(fn, inputs, args.device, args.warmup, args.seconds),
-                                "max_normwise_diff_vs_minicompiler": diff}
-                if diff > 1e-4:
-                    print(f"  WARNING: {vname} differs from minicompiler by {diff:.2e}", file=sys.stderr)
+            fns["compile"] = lambda f=compiled: f(*inputs)
+
+            mc_out = [o.copy() for o in mc()]
+            entry = {"graph": name, "size": size, "dims": dims}
+            samples = time_interleaved(fns, args.warmup, args.seconds)
+            entry["minicompiler"] = {"timing": summarize(samples["minicompiler"], args.warmup)}
+            for v in VARIANTS[1:]:
+                outs = [t.numpy() for t in fns[v]()]
+                ratios = sorted(a / b for a, b in zip(samples[v], samples["minicompiler"]))
+                entry[v] = {
+                    "timing": summarize(samples[v], args.warmup),
+                    "ratio_to_minicompiler": {"median": percentile(ratios, 0.5), "p10": percentile(ratios, 0.1),
+                                              "p90": percentile(ratios, 0.9)},
+                    "max_normwise_diff_vs_minicompiler": normwise_diff(outs, mc_out),
+                }
+                if entry[v]["max_normwise_diff_vs_minicompiler"] > 1e-4:
+                    print(f"  WARNING: {v} differs from minicompiler by "
+                          f"{entry[v]['max_normwise_diff_vs_minicompiler']:.2e}", file=sys.stderr)
             entry["compile"]["compile_seconds"] = compile_seconds
+            mc.close()
         results.append(entry)
-        med = {k: entry[k]["timing"]["median_ms"] for k in ("minicompiler", "eager", "eager_idiomatic", "compile")}
-        print(f"{name:17} {size:24} {med['minicompiler']:13.4f} {med['eager']:10.4f} "
-              f"{med['eager_idiomatic']:10.4f} {med['compile']:10.4f}")
+        r = {v: entry[v]["ratio_to_minicompiler"]["median"] for v in VARIANTS[1:]}
+        print(f"{name:17} {size:24} {entry['minicompiler']['timing']['median_ms']:12.4f}   "
+              f"{r['eager']:7.2f}x {r['eager_idiomatic']:9.2f}x {r['compile']:7.2f}x")
         torch._dynamo.reset()
 
     doc = {
-        "benchmark": f"minicompiler vs PyTorch eager and torch.compile ({args.device})",
-        "method": f"{args.warmup} warmup runs, then individually timed runs for about {args.seconds} s per "
-                  "variant; median reported. minicompiler is timed inside mcc (C++ steady_clock"
-                  + (", CUDA events" if args.device == "cuda" else "")
-                  + "), PyTorch in Python (" + ("CUDA events" if args.device == "cuda" else "time.perf_counter_ns")
-                  + ") under torch.inference_mode().",
-        "environment": environment(args.device, args.threads),
+        "benchmark": "minicompiler vs PyTorch eager and torch.compile (CPU)",
+        "method": f"all variants in one process; {args.warmup} warmup runs each, then interleaved rounds (one run "
+                  f"of each variant per round, rotating order) for about {args.seconds} s per config; "
+                  "time.perf_counter_ns per run; timing = median over rounds; ratio_to_minicompiler = median over "
+                  "rounds of (variant time / minicompiler time) in the same round. minicompiler is called through "
+                  "ctypes on the NumPy buffers (no copies); PyTorch runs under torch.inference_mode().",
+        "environment": environment(args.threads),
         "results": results,
     }
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
