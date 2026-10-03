@@ -248,6 +248,9 @@ inline void write_environment(JsonWriter& json) {
 	json.field("build_flags", MINICOMPILER_BUILD_FLAGS);
 #endif
 	json.field("threads", "1 (Eigen without OpenMP)");
+	// Laptop power modes cap clocks, so record which one the host was in (set
+	// by the benchmark scripts; WSL cannot query Windows directly).
+	json.field("host_power_plan", env_or("MINICOMPILER_HOST_POWER_PLAN", "unknown"));
 	json.end_object();
 }
 

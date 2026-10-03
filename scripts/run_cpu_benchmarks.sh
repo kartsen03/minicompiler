@@ -14,6 +14,12 @@ CORE=${CORE:-2}
 PYTHON=${PYTHON:-python3}
 
 export MINICOMPILER_COMMIT="$(git rev-parse --short HEAD)$(git diff --quiet -- . ':!results' || echo -dirty)"
+# Under WSL, record the Windows power plan: laptop power modes cap clocks.
+if command -v powershell.exe > /dev/null; then
+    MINICOMPILER_HOST_POWER_PLAN=$(powershell.exe -NoProfile -Command "powercfg /getactivescheme" 2> /dev/null |
+        tr -d '\r' | sed -nE 's/.*\((.*)\).*/\1/p')
+    export MINICOMPILER_HOST_POWER_PLAN
+fi
 cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE=Release > /dev/null
 cmake --build "$BUILD_DIR" -j "$(nproc)" --target bench_cpu mcc > /dev/null
 mkdir -p results/cpu
