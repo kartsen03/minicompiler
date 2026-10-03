@@ -1,0 +1,663 @@
+{
+  "benchmark": "minicompiler vs PyTorch eager and torch.compile (CPU)",
+  "method": "all variants in one process; 10 warmup runs each, then interleaved rounds (one run of each variant per round, rotating order) for about 8.0 s per config; time.perf_counter_ns per run; timing = median over rounds; ratio_to_minicompiler = median over rounds of (variant time / minicompiler time) in the same round. minicompiler is called through ctypes on the NumPy buffers (no copies); PyTorch runs under torch.inference_mode().",
+  "environment": {
+    "commit": "d2c5bf6",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "os": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "torch": "2.14.1+cu130",
+    "torch_cpu_capability": "AVX2",
+    "numpy": "2.5.3",
+    "torch_threads": 1,
+    "host_power_plan": "Silent",
+    "inductor_compile_threads": "1",
+    "malloc_mmap_threshold": "4294967296"
+  },
+  "results": [
+    {
+      "graph": "gelu_chain",
+      "size": "1x4096 (16 KB)",
+      "dims": {
+        "M": 1,
+        "N": 4096
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 2000,
+          "median_ms": 0.009948499999999999,
+          "min_ms": 0.008019,
+          "p10_ms": 0.008527900000000001,
+          "p90_ms": 0.012552700000000002,
+          "mean_ms": 0.010721808499999999
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 2000,
+          "median_ms": 0.0415665,
+          "min_ms": 0.035698,
+          "p10_ms": 0.0367965,
+          "p90_ms": 0.05488980000000003,
+          "mean_ms": 0.044945537
+        },
+        "ratio_to_minicompiler": {
+          "median": 4.2503256322302665,
+          "p10": 3.7277203840808504,
+          "p90": 4.699313642256804
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 2000,
+          "median_ms": 0.024412000000000003,
+          "min_ms": 0.022943,
+          "p10_ms": 0.023344800000000002,
+          "p90_ms": 0.026917000000000007,
+          "mean_ms": 0.0255893415
+        },
+        "ratio_to_minicompiler": {
+          "median": 2.505882681371973,
+          "p10": 2.0318180479307895,
+          "p90": 2.8034469493066196
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 2000,
+          "median_ms": 0.086097,
+          "min_ms": 0.073022,
+          "p10_ms": 0.0791064,
+          "p90_ms": 0.11622320000000001,
+          "mean_ms": 0.0946289685
+        },
+        "ratio_to_minicompiler": {
+          "median": 8.626483710141969,
+          "p10": 7.722681267266565,
+          "p90": 10.812004664150125
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07,
+        "compile_seconds": 6.278147791000038
+      }
+    },
+    {
+      "graph": "gelu_chain",
+      "size": "64x4096 (1 MB)",
+      "dims": {
+        "M": 64,
+        "N": 4096
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 1410,
+          "median_ms": 0.5154434999999999,
+          "min_ms": 0.435761,
+          "p10_ms": 0.4716012,
+          "p90_ms": 0.6049935,
+          "mean_ms": 0.5349413524822695
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 1410,
+          "median_ms": 2.2199514999999996,
+          "min_ms": 1.887366,
+          "p10_ms": 2.0370762,
+          "p90_ms": 2.5697044,
+          "mean_ms": 2.2746464624113476
+        },
+        "ratio_to_minicompiler": {
+          "median": 4.289823118831903,
+          "p10": 3.8501015863610055,
+          "p90": 4.740366143394816
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 1410,
+          "median_ms": 1.6349405,
+          "min_ms": 1.46845,
+          "p10_ms": 1.5339025,
+          "p90_ms": 1.8742249000000002,
+          "mean_ms": 1.6853834475177305
+        },
+        "ratio_to_minicompiler": {
+          "median": 3.2149698254964543,
+          "p10": 2.825353643980651,
+          "p90": 3.4845503492757013
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 1410,
+          "median_ms": 1.8693075000000001,
+          "min_ms": 1.576161,
+          "p10_ms": 1.7178329,
+          "p90_ms": 2.1628673,
+          "mean_ms": 1.9164129276595745
+        },
+        "ratio_to_minicompiler": {
+          "median": 3.63918586032596,
+          "p10": 3.24021489621346,
+          "p90": 3.955384731954051
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07,
+        "compile_seconds": 0.08906798699996443
+      }
+    },
+    {
+      "graph": "gelu_chain",
+      "size": "256x4096 (4 MB)",
+      "dims": {
+        "M": 256,
+        "N": 4096
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 299,
+          "median_ms": 2.148216,
+          "min_ms": 1.770798,
+          "p10_ms": 1.8926144,
+          "p90_ms": 2.3523582,
+          "mean_ms": 2.128946397993311
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 299,
+          "median_ms": 9.542044,
+          "min_ms": 8.175221,
+          "p10_ms": 8.4445376,
+          "p90_ms": 10.2528648,
+          "mean_ms": 9.37448916722408
+        },
+        "ratio_to_minicompiler": {
+          "median": 4.427780238106355,
+          "p10": 4.128197412092054,
+          "p90": 4.690179563961041
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 299,
+          "median_ms": 6.334392,
+          "min_ms": 5.54226,
+          "p10_ms": 5.6392522,
+          "p90_ms": 6.7402245999999995,
+          "mean_ms": 6.199077013377926
+        },
+        "ratio_to_minicompiler": {
+          "median": 2.9320460162285595,
+          "p10": 2.7421079486157662,
+          "p90": 3.0838825334149247
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 299,
+          "median_ms": 7.178581,
+          "min_ms": 6.197612,
+          "p10_ms": 6.3775594,
+          "p90_ms": 7.7092728,
+          "mean_ms": 7.052038133779264
+        },
+        "ratio_to_minicompiler": {
+          "median": 3.3325144315720663,
+          "p10": 3.1141432779050304,
+          "p90": 3.5081766351618544
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07,
+        "compile_seconds": 0.09746183100003236
+      }
+    },
+    {
+      "graph": "gelu_chain",
+      "size": "2048x4096 (32 MB)",
+      "dims": {
+        "M": 2048,
+        "N": 4096
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 37,
+          "median_ms": 17.146764,
+          "min_ms": 15.594053,
+          "p10_ms": 15.7404078,
+          "p90_ms": 18.0147056,
+          "mean_ms": 16.91575183783784
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 37,
+          "median_ms": 73.075007,
+          "min_ms": 67.871943,
+          "p10_ms": 68.4088216,
+          "p90_ms": 76.8730304,
+          "mean_ms": 72.70240464864865
+        },
+        "ratio_to_minicompiler": {
+          "median": 4.295342442130922,
+          "p10": 4.141476803826553,
+          "p90": 4.415672113200864
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 37,
+          "median_ms": 49.839952,
+          "min_ms": 44.189962,
+          "p10_ms": 44.5079784,
+          "p90_ms": 50.7802828,
+          "mean_ms": 48.03353443243243
+        },
+        "ratio_to_minicompiler": {
+          "median": 2.844123071129486,
+          "p10": 2.7365234721992775,
+          "p90": 2.9038687077238823
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 37,
+          "median_ms": 54.349415,
+          "min_ms": 48.204597,
+          "p10_ms": 48.7491954,
+          "p90_ms": 56.37067,
+          "mean_ms": 52.79931816216216
+        },
+        "ratio_to_minicompiler": {
+          "median": 3.1037592123186095,
+          "p10": 3.012813630182227,
+          "p90": 3.262982242448007
+        },
+        "max_normwise_diff_vs_minicompiler": 1.1920928955078125e-07,
+        "compile_seconds": 0.12159340099998417
+      }
+    },
+    {
+      "graph": "matmul_bias_relu",
+      "size": "64x1024 @ 1024x1024",
+      "dims": {
+        "M": 64,
+        "K": 1024,
+        "N": 1024
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 692,
+          "median_ms": 3.6997625000000003,
+          "min_ms": 3.095677,
+          "p10_ms": 3.4974173,
+          "p90_ms": 4.2188649,
+          "mean_ms": 3.771739867052023
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 692,
+          "median_ms": 3.212417,
+          "min_ms": 2.660821,
+          "p10_ms": 3.0087786,
+          "p90_ms": 3.673571,
+          "mean_ms": 3.2933323930635834
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.8639225791525675,
+          "p10": 0.806317570647792,
+          "p90": 0.9413869885146966
+        },
+        "max_normwise_diff_vs_minicompiler": 5.417102931546507e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 692,
+          "median_ms": 3.137098,
+          "min_ms": 2.626379,
+          "p10_ms": 2.9748219,
+          "p90_ms": 3.6045455,
+          "mean_ms": 3.2218279104046244
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.8473805658371216,
+          "p10": 0.7851695170064862,
+          "p90": 0.9274298555026051
+        },
+        "max_normwise_diff_vs_minicompiler": 5.417102931546507e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 692,
+          "median_ms": 3.4700284999999997,
+          "min_ms": 2.825985,
+          "p10_ms": 3.2370704,
+          "p90_ms": 3.9973217,
+          "mean_ms": 3.5492571676300577
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.938413604483407,
+          "p10": 0.87242217055961,
+          "p90": 1.0160108778199233
+        },
+        "max_normwise_diff_vs_minicompiler": 5.417102931546507e-07,
+        "compile_seconds": 0.061635714999965785
+      }
+    },
+    {
+      "graph": "matmul_bias_relu",
+      "size": "256x1024 @ 1024x1024",
+      "dims": {
+        "M": 256,
+        "K": 1024,
+        "N": 1024
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 163,
+          "median_ms": 12.225144,
+          "min_ms": 11.795654,
+          "p10_ms": 11.9155328,
+          "p90_ms": 12.809699,
+          "mean_ms": 12.31134508588957
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 163,
+          "median_ms": 11.907974,
+          "min_ms": 11.382702,
+          "p10_ms": 11.618001,
+          "p90_ms": 12.3492494,
+          "mean_ms": 11.97523810429448
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.9738179100060116,
+          "p10": 0.9274285549189515,
+          "p90": 1.0169433682997262
+        },
+        "max_normwise_diff_vs_minicompiler": 5.033448342834206e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 163,
+          "median_ms": 11.820419,
+          "min_ms": 11.149155,
+          "p10_ms": 11.4734786,
+          "p90_ms": 12.448493800000001,
+          "mean_ms": 11.893088865030675
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.9655048536087874,
+          "p10": 0.9208976634026206,
+          "p90": 1.0164850684723217
+        },
+        "max_normwise_diff_vs_minicompiler": 5.033448342834206e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 163,
+          "median_ms": 12.106094,
+          "min_ms": 11.498465,
+          "p10_ms": 11.727094600000001,
+          "p90_ms": 12.635722000000001,
+          "mean_ms": 12.170038705521472
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.9886991707099636,
+          "p10": 0.9386673442748865,
+          "p90": 1.0400118400917755
+        },
+        "max_normwise_diff_vs_minicompiler": 5.033448342834206e-07,
+        "compile_seconds": 0.0740997679999964
+      }
+    },
+    {
+      "graph": "mlp_block",
+      "size": "B=32, 512->2048->512",
+      "dims": {
+        "B": 32,
+        "D": 512,
+        "H": 2048
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 465,
+          "median_ms": 4.744139,
+          "min_ms": 4.398878,
+          "p10_ms": 4.559806,
+          "p90_ms": 5.1530452,
+          "mean_ms": 4.809099524731183
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 465,
+          "median_ms": 4.441739,
+          "min_ms": 3.949596,
+          "p10_ms": 4.2399052,
+          "p90_ms": 4.814905,
+          "mean_ms": 4.4960737032258065
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.934749071742086,
+          "p10": 0.8666667460510434,
+          "p90": 1.0084073927686972
+        },
+        "max_normwise_diff_vs_minicompiler": 2.1483977378574922e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 465,
+          "median_ms": 4.14566,
+          "min_ms": 3.828127,
+          "p10_ms": 3.9635658,
+          "p90_ms": 4.5167354,
+          "mean_ms": 4.2048552
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.8757864857039754,
+          "p10": 0.8037958894974765,
+          "p90": 0.953629410173048
+        },
+        "max_normwise_diff_vs_minicompiler": 1.7187181902859938e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 465,
+          "median_ms": 4.511209,
+          "min_ms": 4.070096,
+          "p10_ms": 4.3038772,
+          "p90_ms": 4.851954200000001,
+          "mean_ms": 4.563257724731183
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.9511022574122898,
+          "p10": 0.8819444867153506,
+          "p90": 1.0196703569016663
+        },
+        "max_normwise_diff_vs_minicompiler": 1.7187181902859938e-07,
+        "compile_seconds": 0.13704173299998956
+      }
+    },
+    {
+      "graph": "mlp_block",
+      "size": "B=128, 512->2048->512",
+      "dims": {
+        "B": 128,
+        "D": 512,
+        "H": 2048
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 131,
+          "median_ms": 14.467459,
+          "min_ms": 12.344824,
+          "p10_ms": 12.773248,
+          "p90_ms": 16.465211,
+          "mean_ms": 14.583283320610686
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 131,
+          "median_ms": 15.194523,
+          "min_ms": 13.895534,
+          "p10_ms": 14.261226,
+          "p90_ms": 17.169506,
+          "mean_ms": 15.612401404580153
+        },
+        "ratio_to_minicompiler": {
+          "median": 1.0696793923438963,
+          "p10": 0.9959974820469496,
+          "p90": 1.1562521762574178
+        },
+        "max_normwise_diff_vs_minicompiler": 2.1483977378574922e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 131,
+          "median_ms": 13.74792,
+          "min_ms": 12.376217,
+          "p10_ms": 12.858614,
+          "p90_ms": 15.322067,
+          "mean_ms": 13.992033885496184
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.9532632266753409,
+          "p10": 0.8967948067546175,
+          "p90": 1.0332983472702524
+        },
+        "max_normwise_diff_vs_minicompiler": 2.5780772854289906e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 131,
+          "median_ms": 14.056523,
+          "min_ms": 12.761665,
+          "p10_ms": 13.030545,
+          "p90_ms": 15.829613,
+          "mean_ms": 14.325720755725191
+        },
+        "ratio_to_minicompiler": {
+          "median": 0.9803089353537046,
+          "p10": 0.9111020198890861,
+          "p90": 1.0679811837822717
+        },
+        "max_normwise_diff_vs_minicompiler": 2.1483977378574922e-07,
+        "compile_seconds": 0.14641491700001552
+      }
+    },
+    {
+      "graph": "mlp_block",
+      "size": "B=512, 512->2048->512",
+      "dims": {
+        "B": 512,
+        "D": 512,
+        "H": 2048
+      },
+      "minicompiler": {
+        "timing": {
+          "warmup": 10,
+          "reps": 36,
+          "median_ms": 49.194285,
+          "min_ms": 43.440743,
+          "p10_ms": 48.065145,
+          "p90_ms": 51.483785499999996,
+          "mean_ms": 49.28868447222222
+        }
+      },
+      "eager": {
+        "timing": {
+          "warmup": 10,
+          "reps": 36,
+          "median_ms": 58.3129635,
+          "min_ms": 51.559743,
+          "p10_ms": 55.170109499999995,
+          "p90_ms": 60.6018145,
+          "mean_ms": 58.1277445
+        },
+        "ratio_to_minicompiler": {
+          "median": 1.1880669633161411,
+          "p10": 1.143907724104643,
+          "p90": 1.214162439366878
+        },
+        "max_normwise_diff_vs_minicompiler": 2.402708332832769e-07
+      },
+      "eager_idiomatic": {
+        "timing": {
+          "warmup": 10,
+          "reps": 36,
+          "median_ms": 53.4507765,
+          "min_ms": 47.004914,
+          "p10_ms": 50.240891500000004,
+          "p90_ms": 54.7593385,
+          "mean_ms": 53.100811416666666
+        },
+        "ratio_to_minicompiler": {
+          "median": 1.0825120747478523,
+          "p10": 1.0446495060345982,
+          "p90": 1.1076498684372478
+        },
+        "max_normwise_diff_vs_minicompiler": 2.402708332832769e-07
+      },
+      "compile": {
+        "timing": {
+          "warmup": 10,
+          "reps": 36,
+          "median_ms": 53.493303499999996,
+          "min_ms": 47.661595,
+          "p10_ms": 51.905711499999995,
+          "p90_ms": 55.7160435,
+          "mean_ms": 53.38277108333333
+        },
+        "ratio_to_minicompiler": {
+          "median": 1.0887208647661886,
+          "p10": 1.0482803640494027,
+          "p90": 1.1225122100529545
+        },
+        "max_normwise_diff_vs_minicompiler": 2.402708332832769e-07,
+        "compile_seconds": 0.17602136799996515
+      }
+    }
+  ]
+}

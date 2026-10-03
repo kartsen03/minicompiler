@@ -1,0 +1,26 @@
+{
+  "benchmark": "tanh over 4194304 float32 values in [-9, 9], one thread, preallocated outputs",
+  "method": "max error in ulps of the float32 result against numpy float64 tanh; time: 5 warmup calls, then 60 interleaved rounds, median; ratio = median over rounds of pytorch / minicompiler",
+  "environment": {
+    "commit": "48e1e37",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "os": "Linux-6.6.114.1-microsoft-standard-WSL2-x86_64-with-glibc2.39",
+    "python": "3.12.3",
+    "torch": "2.14.1+cu130",
+    "torch_cpu_capability": "AVX2",
+    "numpy": "2.5.3",
+    "torch_threads": 1,
+    "host_power_plan": "Silent",
+    "inductor_compile_threads": null,
+    "malloc_mmap_threshold": "glibc default"
+  },
+  "max_error_ulp": {
+    "minicompiler_eigen": 4.748749675229192,
+    "pytorch": 0.51305210031569
+  },
+  "median_ms": {
+    "minicompiler_eigen": 1.9522435,
+    "pytorch": 7.5822575
+  },
+  "pytorch_time_over_minicompiler": 3.882458989581319
+}
