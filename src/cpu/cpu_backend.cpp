@@ -26,6 +26,9 @@ public:
 	}
 
 	Status run(const std::vector<HostTensor>& inputs, std::vector<HostTensor>& outputs) override {
+		// Outputs are written while inputs are still being read, so the two
+		// must not share storage (distinct vectors never do).
+		if (&inputs == &outputs) return Error{"run() needs separate input and output vectors"};
 		if (inputs.size() != graph_.inputs().size()) {
 			return Error{"expected " + std::to_string(graph_.inputs().size()) + " inputs, got " +
 			             std::to_string(inputs.size())};

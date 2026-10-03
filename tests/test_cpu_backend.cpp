@@ -229,6 +229,17 @@ TEST(CpuBackend, OutputsCanBeInputsOrConstants) {
 	EXPECT_EQ(out[1].data, (std::vector<float>{4, 5}));
 }
 
+TEST(CpuBackend, RejectsTheSameVectorForInputsAndOutputs) {
+	// Outputs are written while inputs are still read, so aliasing would
+	// silently corrupt results.
+	Graph g = unary_graph(OpKind::Neg, {4});
+	auto exe = compile_cpu(g);
+	std::vector<HostTensor> v = make_random_inputs(g, 1);
+	Status st = exe->run(v, v);
+	ASSERT_FALSE(st.ok());
+	EXPECT_EQ(st.message(), "run() needs separate input and output vectors");
+}
+
 TEST(CpuBackend, RejectsMismatchedInputs) {
 	Graph g = unary_graph(OpKind::Exp, {4});
 	auto exe = compile_cpu(g);

@@ -21,7 +21,7 @@ public:
 
 	// `inputs` follow Graph::inputs() in order and type. `outputs` is resized
 	// to match Graph::outputs(); passing the same vector again reuses its
-	// storage.
+	// storage. `outputs` must be a different vector from `inputs`.
 	virtual Status run(const std::vector<HostTensor>& inputs, std::vector<HostTensor>& outputs) = 0;
 
 	// Bytes of intermediate storage held after buffer reuse.
