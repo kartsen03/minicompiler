@@ -8,6 +8,7 @@
 #include "minicompiler/runtime/backend.hpp"
 #include "minicompiler/viz/dot_export.hpp"
 
+#include <cerrno>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -68,8 +69,9 @@ int fail(const std::string& message) {
 
 std::optional<long long> parse_int(const std::string& s) {
 	char* end = nullptr;
+	errno = 0;
 	const long long v = std::strtoll(s.c_str(), &end, 10);
-	if (s.empty() || end != s.c_str() + s.size()) return std::nullopt;
+	if (s.empty() || end != s.c_str() + s.size() || errno == ERANGE) return std::nullopt;
 	return v;
 }
 
@@ -134,6 +136,7 @@ int main(int argc, char** argv) {
 			} else {
 				std::optional<long long> n = parse_int(*v);
 				if (!n || *n < 0) return fail(a + " expects a non-negative integer, got '" + *v + "'");
+				if (a != "--seed" && *n > 1000000) return fail(a + " must be at most 1000000");
 				if (a == "--seed") opt.seed = static_cast<std::uint64_t>(*n);
 				if (a == "--warmup") opt.warmup = static_cast<int>(*n);
 				if (a == "--reps") opt.reps = static_cast<int>(*n);
