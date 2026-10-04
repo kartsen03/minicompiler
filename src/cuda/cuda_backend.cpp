@@ -15,15 +15,16 @@ const char* matmul_kernel_name(MatmulKernel kernel) {
 	switch (kernel) {
 		case MatmulKernel::Naive: return "naive";
 		case MatmulKernel::Tiled: return "tiled";
+		case MatmulKernel::RegisterTiled: return "register_tiled";
 	}
 	return "?";
 }
 
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name) {
-	for (MatmulKernel k : {MatmulKernel::Naive, MatmulKernel::Tiled}) {
+	for (MatmulKernel k : {MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::RegisterTiled}) {
 		if (name == matmul_kernel_name(k)) return k;
 	}
-	return Error{"unknown matmul kernel '" + name + "' (naive, tiled)"};
+	return Error{"unknown matmul kernel '" + name + "' (naive, tiled, register_tiled)"};
 }
 
 namespace {

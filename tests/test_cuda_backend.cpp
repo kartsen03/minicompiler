@@ -123,7 +123,7 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 		{128, 128, 128}, {129, 13, 129},  {256, 256, 256},  {16, 4099, 16}, {513, 77, 259}};
 	const double u = std::ldexp(1.0, -24);
 	for (const cuda::MatmulKernel kernel :
-	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled}) {
+	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled}) {
 		cuda::CudaOptions options;
 		options.matmul = kernel;
 		for (const auto& [m, k, n] : shapes) {

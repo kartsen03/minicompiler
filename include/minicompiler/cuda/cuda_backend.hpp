@@ -18,16 +18,17 @@ namespace minicompiler::cuda {
 enum class MatmulKernel {
 	Naive,          // one thread per output element, operands read from global memory
 	Tiled,          // 32x32 tiles of A and B staged in shared memory, one output per thread
+	RegisterTiled,  // 128x128 tiles in shared memory, an 8x8 block of outputs per thread in registers
 };
 
 const char* matmul_kernel_name(MatmulKernel kernel);
 
-// "naive" or "tiled".
+// "naive", "tiled" or "register_tiled".
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name);
 
 struct CudaOptions {
 	int device = 0;
-	MatmulKernel matmul = MatmulKernel::Tiled;
+	MatmulKernel matmul = MatmulKernel::RegisterTiled;
 	// Let elementwise kernels use float4 loads and stores when the layout allows.
 	bool vectorize = true;
 };
