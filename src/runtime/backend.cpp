@@ -2,6 +2,10 @@
 
 #include "cpu/cpu_backend.hpp"
 
+#ifdef MINICOMPILER_HAVE_CUDA
+#include "minicompiler/cuda/cuda_backend.hpp"
+#endif
+
 namespace minicompiler {
 
 std::vector<std::string> available_backends() {
@@ -16,7 +20,7 @@ Result<std::unique_ptr<Backend>> create_backend(std::string_view name) {
 	if (name == "cpu") return make_cpu_backend();
 	if (name == "cuda") {
 #ifdef MINICOMPILER_HAVE_CUDA
-		return make_cuda_backend();
+		return cuda::make_cuda_backend();
 #else
 		return Error{"this build has no CUDA backend: configure with a CUDA toolkit installed and "
 		             "MINICOMPILER_ENABLE_CUDA=ON"};

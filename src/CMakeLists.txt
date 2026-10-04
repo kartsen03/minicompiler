@@ -27,3 +27,19 @@ target_link_libraries(minicompiler
     PRIVATE minicompiler_flags
 )
 
+# The CUDA backend. cuda/codegen.cpp (above) is plain C++ and always built, so
+# the kernel generator is tested even without a GPU.
+if(MINICOMPILER_HAVE_CUDA)
+    target_sources(minicompiler PRIVATE
+        cuda/cuda_backend.cpp
+        cuda/device_info.cpp
+        cuda/kernel_compiler.cpp
+        cuda/matmul_kernels.cu
+    )
+    target_compile_definitions(minicompiler PUBLIC MINICOMPILER_HAVE_CUDA=1)
+    target_compile_options(minicompiler PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)
+    target_link_libraries(minicompiler
+        PUBLIC CUDA::cudart
+        PRIVATE CUDA::nvrtc CUDA::cuda_driver CUDA::nvml
+    )
+endif()

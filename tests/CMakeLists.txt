@@ -15,6 +15,9 @@ add_executable(minicompiler_tests
     test_tensor.cpp
     test_util.cpp
 )
+if(MINICOMPILER_HAVE_CUDA)
+    target_sources(minicompiler_tests PRIVATE test_cuda_backend.cpp)
+endif()
 target_include_directories(minicompiler_tests PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_compile_definitions(minicompiler_tests PRIVATE MINICOMPILER_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_link_libraries(minicompiler_tests PRIVATE minicompiler minicompiler_flags GTest::gtest_main)
