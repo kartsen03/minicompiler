@@ -3,6 +3,7 @@ include(GoogleTest)
 add_executable(minicompiler_tests
     test_constant_folding.cpp
     test_cpu_backend.cpp
+    test_cuda_codegen.cpp
     test_dead_node_elimination.cpp
     test_dot_export.cpp
     test_end_to_end.cpp

@@ -1,6 +1,7 @@
 add_library(minicompiler STATIC
     cpu/cpu_backend.cpp
     cpu/kernels.cpp
+    cuda/codegen.cpp
     fused_program.cpp
     graph.cpp
     graph_builder.cpp
@@ -25,3 +26,4 @@ target_link_libraries(minicompiler
     PUBLIC Eigen3::Eigen
     PRIVATE minicompiler_flags
 )
+
