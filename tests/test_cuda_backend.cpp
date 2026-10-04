@@ -112,32 +112,42 @@ TEST(CudaBackend, BinaryOpsMatchBitForBitForEveryBroadcastPattern) {
 	}
 }
 
-TEST(CudaBackend, MatmulIsWithinTheDotProductErrorBound) {
+TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 	REQUIRE_GPU();
 	// Each side is within gamma_k * sum|a b| of the exact dot product, so they
-	// differ by at most twice that (plus each side's final rounding).
+	// differ by at most twice that (plus each side's final rounding). The
+	// shapes straddle the 32 and 128 tile sizes and the K step of 8, so the
+	// zero-padded edge tiles are exercised.
 	const std::vector<std::array<std::int64_t, 3>> shapes = {
-		{1, 1, 1}, {3, 5, 7}, {1, 1000, 1}, {33, 257, 65}, {127, 129, 131}, {256, 256, 256}};
-	for (const auto& [m, k, n] : shapes) {
-		GraphBuilder b("mm");
-		NodeId a = b.input("a", {m, k});
-		NodeId w = b.input("w", {k, n});
-		b.output(b.matmul(a, w));
-		Graph g = std::move(b).build().value();
-		auto inputs = make_random_inputs(g, 3);
-		const auto cpu = run_on("cpu", g, inputs);
-		const auto gpu = run_on("cuda", g, inputs);
-		const double u = std::ldexp(1.0, -24);
-		const double gamma = static_cast<double>(k) * u / (1.0 - static_cast<double>(k) * u);
-		for (std::int64_t r=0; r<m; ++r) {
-			for (std::int64_t c=0; c<n; ++c) {
-				double abs_dot = 0.0;
-				for (std::int64_t t=0; t<k; ++t) {
-					abs_dot += std::fabs(inputs[0].data[r * k + t] * static_cast<double>(inputs[1].data[t * n + c]));
+		{1, 1, 1},       {3, 5, 7},       {1, 1000, 1},     {33, 257, 65},  {127, 129, 131},
+		{128, 128, 128}, {129, 13, 129},  {256, 256, 256},  {16, 4099, 16}, {513, 77, 259}};
+	const double u = std::ldexp(1.0, -24);
+	for (const cuda::MatmulKernel kernel :
+	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled}) {
+		cuda::CudaOptions options;
+		options.matmul = kernel;
+		for (const auto& [m, k, n] : shapes) {
+			GraphBuilder b("mm");
+			NodeId a = b.input("a", {m, k});
+			NodeId w = b.input("w", {k, n});
+			b.output(b.matmul(a, w));
+			Graph g = std::move(b).build().value();
+			auto inputs = make_random_inputs(g, 3);
+			const auto cpu = run_on("cpu", g, inputs);
+			std::vector<HostTensor> gpu;
+			ASSERT_TRUE(cuda::compile_for_cuda(g, options).value()->run(inputs, gpu).ok());
+			const double gamma = static_cast<double>(k) * u / (1.0 - static_cast<double>(k) * u);
+			for (std::int64_t r=0; r<m; ++r) {
+				for (std::int64_t c=0; c<n; ++c) {
+					double abs_dot = 0.0;
+					for (std::int64_t t=0; t<k; ++t) {
+						abs_dot += std::fabs(inputs[0].data[r * k + t] * static_cast<double>(inputs[1].data[t * n + c]));
+					}
+					const double e = cpu[0].data[r * n + c];
+					ASSERT_LE(std::fabs(gpu[0].data[r * n + c] - e), 2.0 * gamma * abs_dot + 2.0 * u * std::fabs(e))
+					    << cuda::matmul_kernel_name(kernel) << " " << m << "x" << k << "x" << n << " at (" << r
+					    << ", " << c << ")";
 				}
-				const double e = cpu[0].data[r * n + c];
-				ASSERT_LE(std::fabs(gpu[0].data[r * n + c] - e), 2.0 * gamma * abs_dot + 2.0 * u * std::fabs(e))
-				    << m << "x" << k << "x" << n << " at (" << r << ", " << c << ")";
 			}
 		}
 	}

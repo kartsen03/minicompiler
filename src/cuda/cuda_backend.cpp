@@ -14,8 +14,16 @@ namespace minicompiler::cuda {
 const char* matmul_kernel_name(MatmulKernel kernel) {
 	switch (kernel) {
 		case MatmulKernel::Naive: return "naive";
+		case MatmulKernel::Tiled: return "tiled";
 	}
 	return "?";
+}
+
+Result<MatmulKernel> matmul_kernel_from_name(const std::string& name) {
+	for (MatmulKernel k : {MatmulKernel::Naive, MatmulKernel::Tiled}) {
+		if (name == matmul_kernel_name(k)) return k;
+	}
+	return Error{"unknown matmul kernel '" + name + "' (naive, tiled)"};
 }
 
 namespace {
