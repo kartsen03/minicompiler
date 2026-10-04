@@ -3,6 +3,8 @@
 
 #include "harness.hpp"
 
+#include "cuda/codegen.hpp"
+
 #include "minicompiler/parser.hpp"
 #include "minicompiler/passes/pipeline.hpp"
 #include "minicompiler/runtime/backend.hpp"
@@ -29,6 +31,8 @@ compile:
   --passes LIST         "default" (dne,fold,dne,fuse,dne), "none", or a
                         comma-separated list of: dne, fold, fuse
   --print               print the optimized graph
+  --emit-cuda           print the CUDA source generated for each elementwise or fused
+                        node (needs no GPU)
   --stats               print node counts after each pass
   --dump-dot DIR        write DIR/NN_STAGE.dot for the input and after each pass
 
@@ -51,6 +55,7 @@ struct Options {
 	ParseOptions parse;
 	std::string passes = "default";
 	bool print = false;
+	bool emit_cuda = false;
 	bool stats = false;
 	std::string dot_dir;
 	std::string backend = "cpu";
@@ -110,6 +115,8 @@ int main(int argc, char** argv) {
 			return 0;
 		} else if (a == "--print") {
 			opt.print = true;
+		} else if (a == "--emit-cuda") {
+			opt.emit_cuda = true;
 		} else if (a == "--stats") {
 			opt.stats = true;
 		} else if (a == "--run") {
@@ -190,6 +197,17 @@ int main(int argc, char** argv) {
 		}
 	}
 	if (opt.print) std::cout << print_graph(graph);
+	if (opt.emit_cuda) {
+		for (NodeId id=0; id<static_cast<NodeId>(graph.num_nodes()); ++id) {
+			const Node& n = graph.node(id);
+			if (!is_elementwise(n.op) && n.op != OpKind::FusedElementwise) continue;
+			std::vector<Shape> shapes;
+			for (NodeId in : n.inputs) shapes.push_back(graph.node(in).type.shape);
+			const FusedProgram program = n.op == OpKind::FusedElementwise ? *n.fused : cuda::single_op_program(n.op);
+			std::cout << "// node %" << id << " '" << n.name << "' : " << to_string(n.type) << "\n"
+			          << cuda::generate_elementwise_kernel(program, shapes, n.type.shape).source << "\n";
+		}
+	}
 	if (!opt.run && !opt.bench && opt.dump_outputs.empty()) return 0;
 
 	Result<std::unique_ptr<Backend>> backend = create_backend(opt.backend);
