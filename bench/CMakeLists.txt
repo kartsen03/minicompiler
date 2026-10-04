@@ -8,3 +8,11 @@ target_link_libraries(bench_cpu PRIVATE minicompiler minicompiler_flags)
 # PyTorch (bench/torch_compare.py loads it with ctypes).
 add_library(minicompiler_capi SHARED capi.cpp)
 target_link_libraries(minicompiler_capi PRIVATE minicompiler minicompiler_flags)
+
+if(MINICOMPILER_HAVE_CUDA)
+    add_executable(bench_cuda bench_cuda.cpp)
+    target_compile_definitions(bench_cuda PRIVATE
+        MINICOMPILER_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
+        MINICOMPILER_BUILD_FLAGS="${CMAKE_BUILD_TYPE}, march_native=${MINICOMPILER_NATIVE_ARCH}")
+    target_link_libraries(bench_cuda PRIVATE minicompiler minicompiler_flags)
+endif()
