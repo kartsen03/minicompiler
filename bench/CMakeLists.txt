@@ -14,5 +14,7 @@ if(MINICOMPILER_HAVE_CUDA)
     target_compile_definitions(bench_cuda PRIVATE
         MINICOMPILER_SOURCE_DIR="${PROJECT_SOURCE_DIR}"
         MINICOMPILER_BUILD_FLAGS="${CMAKE_BUILD_TYPE}, march_native=${MINICOMPILER_NATIVE_ARCH}")
-    target_link_libraries(bench_cuda PRIVATE minicompiler minicompiler_flags)
+    target_include_directories(bench_cuda PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    # cuBLAS is the reference baseline in the benchmark only, never in the library.
+    target_link_libraries(bench_cuda PRIVATE minicompiler minicompiler_flags CUDA::cublas)
 endif()

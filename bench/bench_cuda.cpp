@@ -3,6 +3,8 @@
 //   elementwise  the GELU chain from 16 KB to 256 MB, unfused (one kernel per
 //                op) against fused (one kernel), with achieved memory
 //                bandwidth as a percentage of the device's peak
+//   matmul       naive, shared-memory tiled and register-tiled kernels against
+//                cuBLAS, with GFLOP/s as a percentage of the device's peak
 //
 // Every variant is compiled once, its inputs are uploaded once, and then the
 // variants are timed in interleaved rounds (one enqueue of each per round,
@@ -14,14 +16,20 @@
 #include "minicompiler/cuda/cuda_backend.hpp"
 #include "minicompiler/parser.hpp"
 #include "minicompiler/passes/pipeline.hpp"
+#include "minicompiler/random.hpp"
 #include "minicompiler/runtime/backend.hpp"
 
+#include "cuda/matmul_kernels.hpp"
+
+#include <cublas_v2.h>
 #include <cuda_runtime.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <fstream>
+#include <functional>
 #include <iostream>
 #include <map>
 #include <string>
@@ -79,8 +87,10 @@ struct Variant {
 	double bytes = 0;
 };
 
-// Times the variants in interleaved rounds with CUDA events on `stream`.
-void time_interleaved(std::vector<Variant>& variants, cudaStream_t stream, int warmup, double seconds) {
+// Times the variants in interleaved rounds with CUDA events on `stream`,
+// sampling the SM clock after every round (while the GPU is under load).
+void time_interleaved(std::vector<Variant>& variants, cudaStream_t stream, int warmup, double seconds,
+                      std::vector<double>& clocks) {
 	cudaEvent_t start, stop;
 	CHECK_CUDA(cudaEventCreate(&start));
 	CHECK_CUDA(cudaEventCreate(&stop));
@@ -104,6 +114,7 @@ void time_interleaved(std::vector<Variant>& variants, cudaStream_t stream, int w
 			Variant& v = variants[(j + static_cast<std::size_t>(r)) % variants.size()];
 			v.samples_ms.push_back(once(v));
 		}
+		clocks.push_back(cuda::current_sm_clock_mhz(0));
 	}
 	CHECK_CUDA(cudaEventDestroy(start));
 	CHECK_CUDA(cudaEventDestroy(stop));
@@ -183,9 +194,7 @@ int run_elementwise(const std::string& graph_dir, const std::string& out_path, d
 			must(v.exe->upload_inputs(in), "upload");
 			variants.push_back(std::move(v));
 		}
-		clocks.push_back(cuda::current_sm_clock_mhz(0));
-		time_interleaved(variants, stream, 10, seconds);
-		clocks.push_back(cuda::current_sm_clock_mhz(0));
+		time_interleaved(variants, stream, 10, seconds, clocks);
 
 		// The two variants must agree before their times mean anything.
 		std::vector<std::vector<std::vector<float>>> outs;
@@ -245,6 +254,216 @@ int run_elementwise(const std::string& graph_dir, const std::string& out_path, d
 	return out ? 0 : 1;
 }
 
+#define CHECK_CUBLAS(expr)                                                    \
+	do {                                                                      \
+		const cublasStatus_t st_ = (expr);                                    \
+		if (st_ != CUBLAS_STATUS_SUCCESS) {                                   \
+			std::fprintf(stderr, "%s failed: status %d\n", #expr, int(st_));  \
+			std::exit(1);                                                     \
+		}                                                                     \
+	} while (0)
+
+// One way of computing C = A B, enqueued on a stream.
+struct MatmulVariant {
+	std::string name;
+	std::function<void(cudaStream_t)> run;
+	std::vector<double> samples_ms;
+};
+
+// Checks `c` against a float64 dot product on `samples` random elements: a
+// float32 result must lie within gamma_k * sum|a b| of the exact value (the
+// standard bound for any summation order), plus its own rounding.
+bool within_error_bound(const std::vector<float>& a, const std::vector<float>& b, const std::vector<float>& c, int m,
+                        int n, int k, int samples) {
+	const double u = std::ldexp(1.0, -24);
+	const double gamma = k * u / (1.0 - k * u);
+	std::uint64_t state = 12345;
+	for (int s=0; s<samples; ++s) {
+		state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+		const int r = static_cast<int>((state >> 33) % static_cast<std::uint64_t>(m));
+		state = state * 6364136223846793005ULL + 1442695040888963407ULL;
+		const int col = static_cast<int>((state >> 33) % static_cast<std::uint64_t>(n));
+		double exact = 0.0, abs_sum = 0.0;
+		for (int t=0; t<k; ++t) {
+			const double p = static_cast<double>(a[static_cast<std::size_t>(r) * k + t]) * b[static_cast<std::size_t>(t) * n + col];
+			exact += p;
+			abs_sum += std::fabs(p);
+		}
+		const double got = c[static_cast<std::size_t>(r) * n + col];
+		if (std::fabs(got - exact) > gamma * abs_sum + u * std::fabs(exact)) return false;
+	}
+	return true;
+}
+
+int run_matmul(const std::string& out_path, double seconds) {
+	const cuda::DeviceInfo device = must(cuda::query_device(0), "query_device");
+	CHECK_CUDA(cudaSetDevice(0));
+	cudaStream_t stream;
+	CHECK_CUDA(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+	cublasHandle_t handle;
+	CHECK_CUBLAS(cublasCreate(&handle));
+	CHECK_CUBLAS(cublasSetStream(handle, stream));
+	// Plain FP32: no TF32 tensor cores (NVIDIA_TF32_OVERRIDE=0 is also set in
+	// main), so cuBLAS does the same arithmetic as the hand-written kernels.
+	CHECK_CUBLAS(cublasSetMathMode(handle, CUBLAS_DEFAULT_MATH));
+
+	const double max_clock = device.max_sm_clock_mhz > 0 ? device.max_sm_clock_mhz : device.sm_clock_mhz;
+	const double peak_at_max_clock = device.peak_fp32_gflops(max_clock);
+	std::vector<double> clocks;
+
+	struct Shape3 {
+		int m, k, n;
+		const char* label;
+	};
+	const std::vector<Shape3> shapes = {
+		{512, 512, 512, "512^3"},
+		{1024, 1024, 1024, "1024^3"},
+		{2048, 2048, 2048, "2048^3"},
+		{4096, 4096, 4096, "4096^3"},
+		{1000, 1000, 1000, "1000^3 (not a tile multiple)"},
+		{1023, 1029, 1031, "1023x1029x1031 (odd)"},
+		{128, 512, 2048, "128x512x2048 (MLP layer 1, B=128)"},
+		{512, 2048, 512, "512x2048x512 (MLP layer 2, B=512)"},
+	};
+
+	bench::JsonWriter json;
+	json.begin_object();
+	json.field("benchmark", "FP32 matmul C[m,n] = A[m,k] B[k,n] (row-major): naive, shared-memory tiled and "
+	                        "register-tiled kernels against cuBLAS");
+	json.field("method", "CUDA events around each kernel on one stream; 3 warmup runs per variant, then interleaved "
+	                     "rounds (rotating order); time = median over rounds; GFLOP/s = 2mnk / time; ratios are "
+	                     "medians over rounds of per-round ratios. Each kernel's result is checked on 1000 sampled "
+	                     "elements against a float64 dot product within the FP32 error bound. cuBLAS runs in "
+	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores)");
+	bench::write_environment(json);
+	json.key("peak_fp32_gflops").begin_object();
+	json.field("at_max_sm_clock", peak_at_max_clock).field("max_sm_clock_mhz", max_clock);
+	json.field("at_cuda_reported_clock", device.peak_fp32_gflops(device.sm_clock_mhz));
+	json.field("cuda_reported_clock_mhz", device.sm_clock_mhz);
+	json.field("formula", "2 x SMs x FP32 lanes per SM x clock");
+	json.end_object();
+	json.key("results").begin_array();
+	std::printf("%-36s %-15s %10s %10s %11s %10s\n", "shape (m x k x n)", "kernel", "median ms", "GFLOP/s",
+	            "% of peak", "% cuBLAS");
+	for (const Shape3& s : shapes) {
+		const std::size_t a_n = static_cast<std::size_t>(s.m) * s.k;
+		const std::size_t b_n = static_cast<std::size_t>(s.k) * s.n;
+		const std::size_t c_n = static_cast<std::size_t>(s.m) * s.n;
+		const std::vector<float> a = uniform_values(a_n, 1, -1.0f, 1.0f);
+		const std::vector<float> b = uniform_values(b_n, 2, -1.0f, 1.0f);
+		float *da, *db, *dc;
+		CHECK_CUDA(cudaMalloc(&da, a_n * sizeof(float)));
+		CHECK_CUDA(cudaMalloc(&db, b_n * sizeof(float)));
+		CHECK_CUDA(cudaMalloc(&dc, c_n * sizeof(float)));
+		CHECK_CUDA(cudaMemcpy(da, a.data(), a_n * sizeof(float), cudaMemcpyHostToDevice));
+		CHECK_CUDA(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice));
+
+		std::vector<MatmulVariant> variants;
+		for (cuda::MatmulKernel kernel :
+		     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled}) {
+			variants.push_back({cuda::matmul_kernel_name(kernel), [=](cudaStream_t st) {
+				                    CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, st));
+			                    }, {}});
+		}
+		variants.push_back({"cublas", [=](cudaStream_t) {
+			                    const float alpha = 1.0f, beta = 0.0f;
+			                    // Row-major C = A B is column-major C^T = B^T A^T.
+			                    CHECK_CUBLAS(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, s.n, s.m, s.k, &alpha, db, s.n,
+			                                             da, s.k, &beta, dc, s.n));
+		                    }, {}});
+
+		// Correctness first: every variant, cuBLAS included, against float64.
+		std::vector<float> c(c_n);
+		for (MatmulVariant& v : variants) {
+			CHECK_CUDA(cudaMemsetAsync(dc, 0xff, c_n * sizeof(float), stream));  // NaN, so a no-op kernel fails
+			v.run(stream);
+			CHECK_CUDA(cudaStreamSynchronize(stream));
+			CHECK_CUDA(cudaMemcpy(c.data(), dc, c_n * sizeof(float), cudaMemcpyDeviceToHost));
+			if (!within_error_bound(a, b, c, s.m, s.n, s.k, 1000)) {
+				std::fprintf(stderr, "%s gives wrong results for %s\n", v.name.c_str(), s.label);
+				return 1;
+			}
+		}
+
+		cudaEvent_t start, stop;
+		CHECK_CUDA(cudaEventCreate(&start));
+		CHECK_CUDA(cudaEventCreate(&stop));
+		auto once = [&](MatmulVariant& v) {
+			CHECK_CUDA(cudaEventRecord(start, stream));
+			v.run(stream);
+			CHECK_CUDA(cudaEventRecord(stop, stream));
+			CHECK_CUDA(cudaEventSynchronize(stop));
+			float ms = 0;
+			CHECK_CUDA(cudaEventElapsedTime(&ms, start, stop));
+			return static_cast<double>(ms);
+		};
+		double round_ms = 0;
+		for (MatmulVariant& v : variants) {
+			for (int i=0; i<3; ++i) once(v);
+			round_ms += once(v);
+		}
+		const int rounds = std::clamp(static_cast<int>(seconds * 1000.0 / std::max(round_ms, 1e-3)), 10, 2000);
+		const std::size_t first_clock = clocks.size();
+		for (int r=0; r<rounds; ++r) {
+			for (std::size_t j=0; j<variants.size(); ++j) {
+				MatmulVariant& v = variants[(j + static_cast<std::size_t>(r)) % variants.size()];
+				v.samples_ms.push_back(once(v));
+			}
+			clocks.push_back(cuda::current_sm_clock_mhz(0));  // sampled under load
+		}
+		CHECK_CUDA(cudaEventDestroy(start));
+		CHECK_CUDA(cudaEventDestroy(stop));
+
+		auto paired = [&](const MatmulVariant& num, const MatmulVariant& den) {
+			std::vector<double> r;
+			for (std::size_t i=0; i<num.samples_ms.size(); ++i) r.push_back(num.samples_ms[i] / den.samples_ms[i]);
+			std::sort(r.begin(), r.end());
+			return bench::percentile(r, 0.5);
+		};
+		std::vector<double> shape_clocks(clocks.begin() + static_cast<std::ptrdiff_t>(first_clock), clocks.end());
+		std::sort(shape_clocks.begin(), shape_clocks.end());
+		const double clock_now = shape_clocks.empty() ? 0.0 : shape_clocks[shape_clocks.size() / 2];
+		const double peak_now = clock_now > 0 ? device.peak_fp32_gflops(clock_now) : 0.0;
+		const double flops = 2.0 * s.m * s.n * s.k;
+		const MatmulVariant& naive = variants[0];
+		const MatmulVariant& cublas = variants.back();
+		json.begin_object();
+		json.field("shape", s.label).field("m", s.m).field("k", s.k).field("n", s.n);
+		json.field("sm_clock_mhz_median", clock_now);
+		json.key("kernels").begin_array();
+		for (const MatmulVariant& v : variants) {
+			const bench::TimingStats t = bench::summarize(v.samples_ms, 3);
+			const double gflops = flops / (t.median_ms * 1e6);
+			const double of_cublas = 100.0 * paired(cublas, v);  // cuBLAS time / this time
+			json.begin_object();
+			json.field("kernel", v.name);
+			json.timing("timing", t);
+			json.field("gflops", gflops).field("percent_of_peak_at_max_clock", 100.0 * gflops / peak_at_max_clock);
+			if (peak_now > 0) json.field("percent_of_peak_at_measured_clock", 100.0 * gflops / peak_now);
+			json.field("percent_of_cublas", of_cublas).field("speedup_over_naive", paired(naive, v));
+			json.end_object();
+			std::printf("%-36s %-15s %10.3f %10.0f %10.1f%% %9.1f%%\n", s.label, v.name.c_str(), t.median_ms, gflops,
+			            100.0 * gflops / peak_at_max_clock, of_cublas);
+		}
+		json.end_array();
+		json.end_object();
+		CHECK_CUDA(cudaFree(da));
+		CHECK_CUDA(cudaFree(db));
+		CHECK_CUDA(cudaFree(dc));
+	}
+	json.end_array();
+	write_device(json, device, clocks);
+	json.end_object();
+	CHECK_CUBLAS(cublasDestroy(handle));
+	CHECK_CUDA(cudaStreamDestroy(stream));
+
+	std::ofstream out(out_path, std::ios::binary);
+	out << json.str();
+	std::printf("peak FP32 %.0f GFLOP/s at the %.0f MHz maximum SM clock (%d SMs x %d lanes x 2); wrote %s\n",
+	            peak_at_max_clock, max_clock, device.sm_count, device.fp32_lanes_per_sm, out_path.c_str());
+	return out ? 0 : 1;
+}
+
 }
 
 int main(int argc, char** argv) {
@@ -263,12 +482,15 @@ int main(int argc, char** argv) {
 		} else if (a == "--quick") {
 			seconds = 0.2;
 		} else {
-			std::cerr << "usage: bench_cuda [--suite elementwise] [--out FILE] [--graphs DIR] [--quick]\n";
+			std::cerr << "usage: bench_cuda [--suite elementwise|matmul] [--out FILE] [--graphs DIR] [--quick]\n";
 			return 1;
 		}
 	}
 	if (out_path.empty()) out_path = "results/gpu/" + suite + ".json";
+	// Before CUDA starts: keep every library on plain FP32 arithmetic.
+	setenv("NVIDIA_TF32_OVERRIDE", "0", 1);
 	if (suite == "elementwise") return run_elementwise(graph_dir, out_path, seconds);
+	if (suite == "matmul") return run_matmul(out_path, seconds);
 	std::cerr << "unknown suite '" << suite << "'\n";
 	return 1;
 }
