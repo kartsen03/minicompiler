@@ -6,38 +6,38 @@ One NVTX range per synchronized call (see `bench/profile_gpu.py`). *Wall* is the
 
 | Variant | Calls | Wall | GPU span | Kernel time | Kernels per call | Kernels (per call × average) |
 |---|---:|---:|---:|---:|---:|---|
-| minicompiler | 50 | 249.7 µs | 213.4 µs | 215.4 µs | 1 | `mc_elementwise` 1 × 215.4 µs |
-| eager | 50 | 2379.6 µs | 2246.0 µs | 2274.7 µs | 11 | `vectorized_elementwise_kernel<4, BinaryFunctor<float, float, float, binary_in...` 3 × 293.9 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<BinaryFunctor<float, f...` 3 × 216.3 µs; `vectorized_elementwise_kernel<4, CUDAFunctor_add<float>, array<char *, 3>, 0>` 1 × 316.6 µs; `vectorized_elementwise_kernel<4, tanh_kernel_cuda(at::TensorIteratorBase &)::...` 1 × 213.5 µs; 3 more |
-| eager_idiomatic | 50 | 248.3 µs | 212.5 µs | 214.3 µs | 1 | `vectorized_elementwise_kernel<4, GeluCUDAKernelImpl(at::TensorIteratorBase &,...` 1 × 214.3 µs |
-| compile | 50 | 378.4 µs | 212.8 µs | 214.4 µs | 1 | `triton_poi_fused_add_div_mul_sqrt_tanh_0` 1 × 214.4 µs |
-| compile_cudagraphs | 50 | 647.0 µs | 431.5 µs | 432.3 µs | 2 | `multi_tensor_apply_kernel<TensorListMetadata<2>, UnaryOpFunctor<float, 2, 1, ...` 1 × 217.0 µs; `triton_poi_fused_add_div_mul_sqrt_tanh_0` 1 × 215.3 µs |
+| minicompiler | 50 | 279.1 µs | 211.2 µs | 213.0 µs | 1 | `mc_elementwise` 1 × 213.0 µs |
+| eager | 50 | 2420.5 µs | 2256.4 µs | 2373.5 µs | 11 | `vectorized_elementwise_kernel<4, BinaryFunctor<float, float, float, binary_in...` 3 × 312.4 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<BinaryFunctor<float, f...` 3 × 220.5 µs; `vectorized_elementwise_kernel<4, CUDAFunctor_add<float>, array<char *, 3>, 0>` 1 × 330.5 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<CUDAFunctor_add<float>...` 1 × 227.1 µs; 3 more |
+| eager_idiomatic | 50 | 280.6 µs | 210.1 µs | 211.4 µs | 1 | `vectorized_elementwise_kernel<4, GeluCUDAKernelImpl(at::TensorIteratorBase &,...` 1 × 211.4 µs |
+| compile | 50 | 363.2 µs | 211.0 µs | 212.2 µs | 1 | `triton_poi_fused_add_div_mul_sqrt_tanh_0` 1 × 212.2 µs |
+| compile_cudagraphs | 50 | 631.5 µs | 426.7 µs | 482.7 µs | 2 | `triton_poi_fused_add_div_mul_sqrt_tanh_0` 1 × 267.9 µs; `multi_tensor_apply_kernel<TensorListMetadata<2>, UnaryOpFunctor<float, 2, 1, ...` 1 × 214.8 µs |
 
 ## mlp_b512
 
 | Variant | Calls | Wall | GPU span | Kernel time | Kernels per call | Kernels (per call × average) |
 |---|---:|---:|---:|---:|---:|---|
-| minicompiler | 50 | 958.5 µs | 850.8 µs | 845.3 µs | 4 | `matmul_register_tiled<64, 64, 8, 4, 4>` 1 × 495.7 µs; `matmul_register_tiled<128, 128, 8, 8, 8>` 1 × 314.8 µs; `mc_elementwise` 2 × 17.4 µs |
-| eager | 50 | 874.2 µs | 790.0 µs | 749.8 µs | 22 | `ampere_sgemm_128x64_nn` 1 × 149.6 µs; `ampere_sgemm_128x128_nn` 1 × 148.6 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<CUDAFunctor_add<float>...` 6 × 20.0 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<BinaryFunctor<float, f...` 4 × 28.2 µs; 6 more |
-| eager_idiomatic | 50 | 424.6 µs | 370.6 µs | 353.1 µs | 6 | `ampere_sgemm_128x128_nn` 1 × 149.8 µs; `ampere_sgemm_128x64_nn` 1 × 141.9 µs; `batch_norm_transform_input_channels_last_kernel<float, float, float, 4>` 1 × 27.5 µs; `vectorized_elementwise_kernel<4, GeluCUDAKernelImpl(at::TensorIteratorBase &,...` 1 × 26.2 µs; 2 more |
-| compile | 50 | 530.1 µs | 341.8 µs | 327.9 µs | 4 | `ampere_sgemm_128x128_nn` 1 × 153.7 µs; `ampere_sgemm_128x64_nn` 1 × 144.7 µs; `triton_poi_fused_add_div_mul_sqrt_sub_tanh_0` 1 × 24.6 µs; `triton_poi_fused_add_1` 1 × 4.9 µs |
-| compile_cudagraphs | 50 | 621.9 µs | 397.8 µs | 389.4 µs | 5 | `ampere_sgemm_128x128_nn` 1 × 152.7 µs; `ampere_sgemm_128x64_nn` 1 × 144.4 µs; `multi_tensor_apply_kernel<TensorListMetadata<2>, UnaryOpFunctor<float, 2, 1, ...` 1 × 62.8 µs; `triton_poi_fused_add_div_mul_sqrt_sub_tanh_0` 1 × 24.8 µs; 1 more |
+| minicompiler | 50 | 475.7 µs | 404.4 µs | 397.9 µs | 5 | `matmul_vectorized<8, 1, 1>` 2 × 178.1 µs; `mc_elementwise` 2 × 17.0 µs; `sum_splits<1>` 1 × 7.6 µs |
+| eager | 50 | 859.5 µs | 772.1 µs | 736.2 µs | 22 | `ampere_sgemm_128x128_nn` 1 × 148.1 µs; `ampere_sgemm_128x64_nn` 1 × 140.4 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<CUDAFunctor_add<float>...` 6 × 19.8 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<BinaryFunctor<float, f...` 4 × 27.9 µs; 6 more |
+| eager_idiomatic | 50 | 420.1 µs | 370.2 µs | 350.5 µs | 6 | `ampere_sgemm_128x128_nn` 1 × 148.7 µs; `ampere_sgemm_128x64_nn` 1 × 141.4 µs; `batch_norm_transform_input_channels_last_kernel<float, float, float, 4>` 1 × 26.9 µs; `vectorized_elementwise_kernel<4, GeluCUDAKernelImpl(at::TensorIteratorBase &,...` 1 × 25.9 µs; 2 more |
+| compile | 50 | 502.8 µs | 342.0 µs | 327.3 µs | 4 | `ampere_sgemm_128x128_nn` 1 × 152.6 µs; `ampere_sgemm_128x64_nn` 1 × 144.3 µs; `triton_poi_fused_add_div_mul_sqrt_sub_tanh_0` 1 × 25.5 µs; `triton_poi_fused_add_1` 1 × 4.9 µs |
+| compile_cudagraphs | 50 | 601.4 µs | 397.3 µs | 387.7 µs | 5 | `ampere_sgemm_128x128_nn` 1 × 151.4 µs; `ampere_sgemm_128x64_nn` 1 × 144.3 µs; `multi_tensor_apply_kernel<TensorListMetadata<2>, UnaryOpFunctor<float, 2, 1, ...` 1 × 62.1 µs; `triton_poi_fused_add_div_mul_sqrt_sub_tanh_0` 1 × 25.3 µs; 1 more |
 
 ## mlp_b128
 
 | Variant | Calls | Wall | GPU span | Kernel time | Kernels per call | Kernels (per call × average) |
 |---|---:|---:|---:|---:|---:|---|
-| minicompiler | 50 | 629.9 µs | 524.3 µs | 520.1 µs | 4 | `matmul_register_tiled<64, 64, 8, 4, 4>` 2 × 256.1 µs; `mc_elementwise` 2 × 4.0 µs |
-| eager | 50 | 656.6 µs | 564.7 µs | 197.4 µs | 22 | `ampere_sgemm_64x32_sliced1x4_nn` 1 × 65.5 µs; `ampere_sgemm_128x32_nn` 1 × 60.9 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<CUDAFunctor_add<float>...` 6 × 3.7 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<BinaryFunctor<float, f...` 4 × 4.9 µs; 6 more |
-| eager_idiomatic | 50 | 330.4 µs | 249.2 µs | 136.2 µs | 6 | `ampere_sgemm_64x32_sliced1x4_nn` 1 × 64.3 µs; `ampere_sgemm_128x32_nn` 1 × 60.4 µs; `batch_norm_transform_input_channels_last_kernel<float, float, float, 4>` 1 × 5.1 µs; `vectorized_elementwise_kernel<4, GeluCUDAKernelImpl(at::TensorIteratorBase &,...` 1 × 2.7 µs; 2 more |
-| compile | 50 | 327.8 µs | 160.8 µs | 131.7 µs | 4 | `ampere_sgemm_64x32_sliced1x4_nn` 1 × 63.8 µs; `ampere_sgemm_128x32_nn` 1 × 60.0 µs; `triton_poi_fused_add_div_mul_sqrt_sub_tanh_0` 1 × 5.4 µs; `triton_poi_fused_add_1` 1 × 2.4 µs |
-| compile_cudagraphs | 50 | 401.2 µs | 196.0 µs | 186.8 µs | 5 | `ampere_sgemm_64x32_sliced1x4_nn` 1 × 64.0 µs; `ampere_sgemm_128x32_nn` 1 × 60.8 µs; `multi_tensor_apply_kernel<TensorListMetadata<2>, UnaryOpFunctor<float, 2, 1, ...` 1 × 54.7 µs; `triton_poi_fused_add_div_mul_sqrt_sub_tanh_0` 1 × 5.2 µs; 1 more |
+| minicompiler | 50 | 160.6 µs | 123.4 µs | 115.5 µs | 6 | `matmul_vectorized<8, 1, 1>` 2 × 48.3 µs; `sum_splits<1>` 2 × 5.5 µs; `mc_elementwise` 2 × 4.0 µs |
+| eager | 50 | 590.8 µs | 506.1 µs | 203.8 µs | 22 | `ampere_sgemm_64x32_sliced1x4_nn` 1 × 68.4 µs; `ampere_sgemm_128x32_nn` 1 × 64.3 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<CUDAFunctor_add<float>...` 6 × 3.8 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<BinaryFunctor<float, f...` 4 × 5.0 µs; 6 more |
+| eager_idiomatic | 50 | 276.5 µs | 219.0 µs | 144.7 µs | 6 | `ampere_sgemm_64x32_sliced1x4_nn` 1 × 68.6 µs; `ampere_sgemm_128x32_nn` 1 × 64.7 µs; `batch_norm_transform_input_channels_last_kernel<float, float, float, 4>` 1 × 4.9 µs; `vectorized_elementwise_kernel<4, GeluCUDAKernelImpl(at::TensorIteratorBase &,...` 1 × 2.8 µs; 2 more |
+| compile | 50 | 382.7 µs | 187.9 µs | 141.2 µs | 4 | `ampere_sgemm_64x32_sliced1x4_nn` 1 × 68.8 µs; `ampere_sgemm_128x32_nn` 1 × 64.4 µs; `triton_poi_fused_add_div_mul_sqrt_sub_tanh_0` 1 × 5.7 µs; `triton_poi_fused_add_1` 1 × 2.4 µs |
+| compile_cudagraphs | 50 | 398.7 µs | 205.1 µs | 195.8 µs | 5 | `ampere_sgemm_64x32_sliced1x4_nn` 1 × 69.5 µs; `ampere_sgemm_128x32_nn` 1 × 65.0 µs; `multi_tensor_apply_kernel<TensorListMetadata<2>, UnaryOpFunctor<float, 2, 1, ...` 1 × 53.8 µs; `triton_poi_fused_add_div_mul_sqrt_sub_tanh_0` 1 × 5.4 µs; 1 more |
 
 ## gelu_16kb
 
 | Variant | Calls | Wall | GPU span | Kernel time | Kernels per call | Kernels (per call × average) |
 |---|---:|---:|---:|---:|---:|---|
-| minicompiler | 50 | 38.0 µs | 7.4 µs | 7.4 µs | 1 | `mc_elementwise` 1 × 7.4 µs |
-| eager | 50 | 220.1 µs | 174.4 µs | 88.5 µs | 11 | `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<BinaryFunctor<float, f...` 3 × 8.8 µs; `vectorized_elementwise_kernel<4, BinaryFunctor<float, float, float, binary_in...` 3 × 7.2 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<CUDAFunctor_add<float>...` 1 × 8.9 µs; `vectorized_elementwise_kernel<4, BinaryFunctor<float, float, float, binary_in...` 1 × 8.5 µs; 3 more |
-| eager_idiomatic | 50 | 46.5 µs | 7.5 µs | 7.5 µs | 1 | `vectorized_elementwise_kernel<4, GeluCUDAKernelImpl(at::TensorIteratorBase &,...` 1 × 7.5 µs |
-| compile | 50 | 101.3 µs | 7.6 µs | 7.5 µs | 1 | `triton_poi_fused_add_div_mul_sqrt_tanh_0` 1 × 7.5 µs |
-| compile_cudagraphs | 50 | 175.9 µs | 22.5 µs | 18.9 µs | 2 | `multi_tensor_apply_kernel<TensorListMetadata<2>, UnaryOpFunctor<float, 2, 1, ...` 1 × 11.4 µs; `triton_poi_fused_add_div_mul_sqrt_tanh_0` 1 × 7.4 µs |
+| minicompiler | 50 | 44.6 µs | 7.3 µs | 7.3 µs | 1 | `mc_elementwise` 1 × 7.3 µs |
+| eager | 50 | 226.6 µs | 179.2 µs | 87.0 µs | 11 | `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<BinaryFunctor<float, f...` 3 × 8.6 µs; `vectorized_elementwise_kernel<4, BinaryFunctor<float, float, float, binary_in...` 3 × 7.0 µs; `elementwise_kernel<128, 2, void gpu_kernel_impl_nocast<CUDAFunctor_add<float>...` 1 × 8.7 µs; `vectorized_elementwise_kernel<4, BinaryFunctor<float, float, float, binary_in...` 1 × 8.4 µs; 3 more |
+| eager_idiomatic | 50 | 47.6 µs | 7.3 µs | 7.3 µs | 1 | `vectorized_elementwise_kernel<4, GeluCUDAKernelImpl(at::TensorIteratorBase &,...` 1 × 7.3 µs |
+| compile | 50 | 102.0 µs | 7.5 µs | 7.5 µs | 1 | `triton_poi_fused_add_div_mul_sqrt_tanh_0` 1 × 7.5 µs |
+| compile_cudagraphs | 50 | 198.4 µs | 22.6 µs | 18.9 µs | 2 | `multi_tensor_apply_kernel<TensorListMetadata<2>, UnaryOpFunctor<float, 2, 1, ...` 1 × 11.4 µs; `triton_poi_fused_add_div_mul_sqrt_tanh_0` 1 × 7.5 µs |

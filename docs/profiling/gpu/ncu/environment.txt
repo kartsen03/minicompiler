@@ -1,4 +1,3 @@
 ncu: Version 2025.4.1.0 (build 37053803) (public-release)
 GPU: NVIDIA GeForce RTX 3060 Laptop GPU, 592.00
-commit: 8a8862c (profiled with the then-uncommitted scripts/profile_kernels_ncu.sh and ncu_summary.py, committed with this file)
-clock: SM held at 900 MHz by Nsight Compute (--clock-control base)
+commit: a5ea281
