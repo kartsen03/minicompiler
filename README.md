@@ -381,8 +381,26 @@ host time from kernel time:
   which splits K four ways inside each block: the split-K idea under
   [What I'd do next](#what-id-do-next).
 
-Nsight Compute could not be used: GPU performance counters are restricted to
-administrators on this machine, so there is no per-kernel counter analysis.
+[Nsight Compute counters](docs/profiling/gpu/ncu) for one launch of each
+kernel (with the GPU held at its 900 MHz base clock) back the explanations
+above with measurements:
+
+- The unfused GELU chain moves 21.0 times its input through DRAM and the
+  fused kernel 2.0 times, both at 91–92% of the DRAM's peak throughput.
+- 87–89% of the naive matmul's loads hit in L1. The 32×32 tiled kernel's FMA
+  pipe is busy only 8–9% of the time; its top stall is the full queue of
+  shared-memory instructions.
+- Every register-tiled read pattern is free of bank conflicts. At 2048³ the
+  128×128 kernel keeps the FMA pipe busy 40% of the time, cuBLAS 64% at the
+  same occupancy: the difference is the issue slots the 32-bit shared-memory
+  loads take.
+- The 128×2048×512 layer's 4 blocks of 128×128 leave the GPU at 17%
+  occupancy.
+
+<img src="docs/profiling/gpu/ncu/roofline.svg" width="640" alt="Roofline of every kernel: the GELU kernels on the DRAM roof, the matmul kernels under the FP32 roof">
+
+Nsight Compute held the SM at 900 MHz, so that chart's FP32 roof (6,908
+GFLOP/s) is the peak at that clock.
 
 ## Reproducing the GPU results on Colab
 
@@ -436,9 +454,6 @@ tests skip and everything else runs.
 - **Autotuning instead of a fixed rule**: time the candidate tile sizes for
   each matmul shape at compile time. The three-quarters rule is calibrated on
   one GPU.
-- **Hardware counters** with Nsight Compute, which needs GPU counter access
-  (off by default on this machine): achieved occupancy, DRAM throughput and
-  shared-memory bank conflicts per kernel.
 - **Reductions** (softmax, LayerNorm) and fusion across them, which is where
   graph compilers find most of their gains on transformer blocks.
 

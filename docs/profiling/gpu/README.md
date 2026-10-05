@@ -11,10 +11,9 @@ from. Machine and versions: [`environment.txt`](environment.txt). Tracing adds
 a little host overhead, so the wall times here run slightly above the
 benchmark's.
 
-Nsight Compute, which reads per-kernel hardware counters (occupancy, DRAM
-throughput, bank conflicts), fails here with `ERR_NVGPUCTRPERM`: GPU
-performance counters are restricted to administrators on this machine. There
-is no kernel-level counter analysis in this repository.
+For per-kernel hardware counters (occupancy, DRAM traffic, bank conflicts,
+stall reasons, a roofline), see the Nsight Compute profiles in
+[`ncu/`](ncu/README.md).
 
 ## What the profiles show
 

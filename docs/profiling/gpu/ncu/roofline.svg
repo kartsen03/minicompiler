@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="460" font-family="sans-serif" font-size="11"><rect width="100%" height="100%" fill="white"/>
+<line x1="113.8" y1="20" x2="113.8" y2="410" stroke="#ddd"/>
+<text x="113.8" y="426" text-anchor="middle">0.1</text>
+<line x1="259.4" y1="20" x2="259.4" y2="410" stroke="#ddd"/>
+<text x="259.4" y="426" text-anchor="middle">1</text>
+<line x1="405.0" y1="20" x2="405.0" y2="410" stroke="#ddd"/>
+<text x="405.0" y="426" text-anchor="middle">10</text>
+<line x1="550.6" y1="20" x2="550.6" y2="410" stroke="#ddd"/>
+<text x="550.6" y="426" text-anchor="middle">100</text>
+<line x1="696.2" y1="20" x2="696.2" y2="410" stroke="#ddd"/>
+<text x="696.2" y="426" text-anchor="middle">1000</text>
+<line x1="70" y1="410.0" x2="740" y2="410.0" stroke="#ddd"/>
+<text x="64" y="414.0" text-anchor="end">10</text>
+<line x1="70" y1="297.8" x2="740" y2="297.8" stroke="#ddd"/>
+<text x="64" y="301.8" text-anchor="end">100</text>
+<line x1="70" y1="185.7" x2="740" y2="185.7" stroke="#ddd"/>
+<text x="64" y="189.7" text-anchor="end">1000</text>
+<line x1="70" y1="73.5" x2="740" y2="73.5" stroke="#ddd"/>
+<text x="64" y="77.5" text-anchor="end">10000</text>
+<polyline fill="none" stroke="#333" stroke-width="2" points="70.0,384.7 450.6,91.5 740.0,91.5"/>
+<text x="736.0" y="85.5" text-anchor="end">FP32 peak at the profiling clock: 6,908 GFLOP/s</text>
+<text x="125.4" y="334.1">DRAM 336 GB/s</text>
+<circle cx="324.9" cy="196.2" r="4" fill="#009e73"><title>gelu_64MB.fused: 2.82 FLOP/B, 806 GFLOP/s</title></circle>
+<circle cx="176.2" cy="310.5" r="4" fill="#cc79a7"><title>gelu_64MB.unfused: 0.27 FLOP/B, 77 GFLOP/s</title></circle>
+<circle cx="492.2" cy="146.3" r="4" fill="#d55e00"><title>matmul_128x2048x512.cublas: 39.74 FLOP/B, 2,244 GFLOP/s</title></circle>
+<circle cx="416.7" cy="232.8" r="4" fill="#999"><title>matmul_128x2048x512.naive: 12.03 FLOP/B, 380 GFLOP/s</title></circle>
+<circle cx="497.5" cy="252.5" r="4" fill="#0072b2"><title>matmul_128x2048x512.register_tiled_128: 43.16 FLOP/B, 254 GFLOP/s</title></circle>
+<circle cx="497.2" cy="238.6" r="4" fill="#56b4e9"><title>matmul_128x2048x512.register_tiled_64: 43.00 FLOP/B, 338 GFLOP/s</title></circle>
+<circle cx="458.3" cy="233.6" r="4" fill="#e69f00"><title>matmul_128x2048x512.tiled: 23.23 FLOP/B, 374 GFLOP/s</title></circle>
+<circle cx="540.1" cy="116.0" r="4" fill="#d55e00"><title>matmul_2048x2048x2048.cublas: 84.77 FLOP/B, 4,179 GFLOP/s</title></circle>
+<circle cx="389.5" cy="227.2" r="4" fill="#999"><title>matmul_2048x2048x2048.naive: 7.83 FLOP/B, 426 GFLOP/s</title></circle>
+<circle cx="549.1" cy="140.7" r="4" fill="#0072b2"><title>matmul_2048x2048x2048.register_tiled_128: 97.62 FLOP/B, 2,519 GFLOP/s</title></circle>
+<circle cx="480.6" cy="157.6" r="4" fill="#56b4e9"><title>matmul_2048x2048x2048.register_tiled_64: 33.07 FLOP/B, 1,780 GFLOP/s</title></circle>
+<circle cx="430.7" cy="217.4" r="4" fill="#e69f00"><title>matmul_2048x2048x2048.tiled: 15.02 FLOP/B, 521 GFLOP/s</title></circle>
+<circle cx="538.2" cy="133.1" r="4" fill="#d55e00"><title>matmul_512x512x512.cublas: 82.20 FLOP/B, 2,940 GFLOP/s</title></circle>
+<circle cx="539.0" cy="229.3" r="4" fill="#999"><title>matmul_512x512x512.naive: 83.24 FLOP/B, 409 GFLOP/s</title></circle>
+<circle cx="548.5" cy="186.1" r="4" fill="#0072b2"><title>matmul_512x512x512.register_tiled_128: 96.75 FLOP/B, 992 GFLOP/s</title></circle>
+<circle cx="547.3" cy="181.2" r="4" fill="#56b4e9"><title>matmul_512x512x512.register_tiled_64: 94.89 FLOP/B, 1,096 GFLOP/s</title></circle>
+<circle cx="539.8" cy="219.4" r="4" fill="#e69f00"><title>matmul_512x512x512.tiled: 84.32 FLOP/B, 500 GFLOP/s</title></circle>
+<circle cx="84" cy="30" r="4" fill="#999"/><text x="94" y="34">naive</text>
+<circle cx="84" cy="45" r="4" fill="#e69f00"/><text x="94" y="49">tiled</text>
+<circle cx="84" cy="60" r="4" fill="#0072b2"/><text x="94" y="64">register_tiled_128</text>
+<circle cx="84" cy="75" r="4" fill="#56b4e9"/><text x="94" y="79">register_tiled_64</text>
+<circle cx="84" cy="90" r="4" fill="#d55e00"/><text x="94" y="94">cublas</text>
+<circle cx="84" cy="105" r="4" fill="#cc79a7"/><text x="94" y="109">unfused</text>
+<circle cx="84" cy="120" r="4" fill="#009e73"/><text x="94" y="124">fused</text>
+<text x="405" y="448" text-anchor="middle">FLOP per DRAM byte</text>
+<text x="16" y="215" transform="rotate(-90 16 215)" text-anchor="middle">GFLOP/s</text></svg>
