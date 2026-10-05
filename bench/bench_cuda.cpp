@@ -269,23 +269,95 @@ int run_elementwise(const std::string& graph_dir, const std::string& out_path, d
 		}                                                                     \
 	} while (0)
 
-// One way of computing C = A B, enqueued on a stream.
-struct MatmulVariant {
-	std::string name;
-	std::function<void(cudaStream_t)> run;
-	std::vector<double> samples_ms;  // GPU time per replay of `exec`
-	cudaGraphExec_t exec = nullptr;  // the launches, between the event nodes `start` and `stop`
-	cudaEvent_t start = nullptr;
-	cudaEvent_t stop = nullptr;
+// A non-blocking stream, destroyed with the object.
+class Stream {
+public:
+	Stream() { CHECK_CUDA(cudaStreamCreateWithFlags(&stream_, cudaStreamNonBlocking)); }
+	Stream(const Stream&) = delete;
+	Stream& operator=(const Stream&) = delete;
+	~Stream() { cudaStreamDestroy(stream_); }
+	operator cudaStream_t() const { return stream_; }
+
+private:
+	cudaStream_t stream_ = nullptr;
 };
 
-// Checks `c` against a float64 dot product on `samples` random elements: a
-// float32 result must lie within gamma_k * sum|a b| of the exact value (the
-// standard bound for any summation order), plus its own rounding.
-bool within_error_bound(const std::vector<float>& a, const std::vector<float>& b, const std::vector<float>& c, int m,
-                        int n, int k, int samples) {
+// A cuBLAS handle on one stream, in CUBLAS_DEFAULT_MATH (cublasSgemm is then
+// plain FP32), with a workspace of its own so that it never allocates while
+// being captured into a CUDA graph.
+class Cublas {
+public:
+	explicit Cublas(cudaStream_t stream) {
+		CHECK_CUBLAS(cublasCreate(&handle_));
+		CHECK_CUBLAS(cublasSetStream(handle_, stream));
+		CHECK_CUBLAS(cublasSetMathMode(handle_, CUBLAS_DEFAULT_MATH));
+		CHECK_CUDA(cudaMalloc(&workspace_, kWorkspace));
+		CHECK_CUBLAS(cublasSetWorkspace(handle_, workspace_, kWorkspace));
+	}
+	Cublas(const Cublas&) = delete;
+	Cublas& operator=(const Cublas&) = delete;
+	~Cublas() {
+		cublasDestroy(handle_);
+		cudaFree(workspace_);
+	}
+
+	// Row-major C = A B, as column-major C^T = B^T A^T.
+	void sgemm(const float* a, const float* b, float* c, int m, int n, int k) const {
+		const float alpha = 1.0f, beta = 0.0f;
+		CHECK_CUBLAS(cublasSgemm(handle_, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, b, n, a, k, &beta, c, n));
+	}
+	// The same through cublasGemmEx on the FP32 matrices with `compute`, which
+	// can let cuBLAS round the inputs to TF32, BF16 or FP16 for tensor cores.
+	void gemm_ex(cublasComputeType_t compute, const float* a, const float* b, float* c, int m, int n, int k) const {
+		const float alpha = 1.0f, beta = 0.0f;
+		CHECK_CUBLAS(cublasGemmEx(handle_, CUBLAS_OP_N, CUBLAS_OP_N, n, m, k, &alpha, b, CUDA_R_32F, n, a, CUDA_R_32F, k,
+		                          &beta, c, CUDA_R_32F, n, compute, CUBLAS_GEMM_DEFAULT));
+	}
+
+private:
+	static constexpr std::size_t kWorkspace = 32u << 20;
+	cublasHandle_t handle_ = nullptr;
+	void* workspace_ = nullptr;
+};
+
+// A bound on |c - exact| for an element of C: per_abs_dot sum|a b| +
+// per_exact |exact| + absolute.
+struct ErrorBound {
+	double per_abs_dot = 0;
+	double per_exact = 0;
+	double absolute = 0;
+};
+
+// FP32 in any summation order: gamma_k sum|a b| (the standard bound), plus the
+// result's own rounding.
+ErrorBound fp32_bound(int k) {
 	const double u = std::ldexp(1.0, -24);
-	const double gamma = k * u / (1.0 - k * u);
+	return {k * u / (1.0 - k * u), u, 0.0};
+}
+
+// Inputs rounded to a format with unit roundoff u, then products accumulated
+// in FP32, as in the tensor-core test, but with the inputs allowed to be
+// truncated (an error of 2u): cuBLAS does not document how it converts them.
+// `spacing` is the format's subnormal spacing, the most an input loses below
+// the smallest normal; for inputs in [-1, 1] each product loses at most twice
+// that.
+ErrorBound tensor_core_bound(int k, double u, double spacing) {
+	const double u32 = std::ldexp(1.0, -24);
+	const double gamma = k * u32 / (1.0 - k * u32);
+	const double ui = 2.0 * u;
+	return {2.0 * ui + ui * ui + 2.0 * gamma, 2.0 * u32, 2.0 * k * spacing};
+}
+
+struct SampledError {
+	bool within_bound = true;
+	double max_over_abs_dot = 0;  // the largest |c - exact| / sum|a b| among the samples
+};
+
+// Compares `samples` random elements of C with a float64 dot product. A NaN
+// is outside every bound.
+SampledError sampled_error(const std::vector<float>& a, const std::vector<float>& b, const std::vector<float>& c,
+                           int m, int n, int k, int samples, const ErrorBound& bound) {
+	SampledError e;
 	std::uint64_t state = 12345;
 	for (int s=0; s<samples; ++s) {
 		state = state * 6364136223846793005ULL + 1442695040888963407ULL;
@@ -298,39 +370,154 @@ bool within_error_bound(const std::vector<float>& a, const std::vector<float>& b
 			exact += p;
 			abs_sum += std::fabs(p);
 		}
-		const double got = c[static_cast<std::size_t>(r) * n + col];
-		if (std::fabs(got - exact) > gamma * abs_sum + u * std::fabs(exact)) return false;
+		const double err = std::fabs(c[static_cast<std::size_t>(r) * n + col] - exact);
+		if (!(err <= bound.per_abs_dot * abs_sum + bound.per_exact * std::fabs(exact) + bound.absolute)) {
+			e.within_bound = false;
+		}
+		e.max_over_abs_dot = std::max(e.max_over_abs_dot, abs_sum > 0 ? err / abs_sum : err);
 	}
-	return true;
+	return e;
 }
+
+// One way of computing C = A B, enqueued on a stream.
+struct MatmulVariant {
+	std::string name;
+	std::function<void(cudaStream_t)> run;
+	std::string format;              // the precision of the multiply's inputs: fp32, tf32, bf16 or f16
+	ErrorBound bound;                // what the result is checked against
+	std::vector<double> samples_ms;  // GPU time per round
+	SampledError error;
+};
+
+// Runs the variant once into C filled with NaN, so that a kernel that writes
+// nothing fails, and checks 1000 sampled elements against its bound.
+SampledError run_and_check(const MatmulVariant& v, cudaStream_t stream, const std::vector<float>& a,
+                           const std::vector<float>& b, float* dc, int m, int n, int k) {
+	const std::size_t c_n = static_cast<std::size_t>(m) * n;
+	CHECK_CUDA(cudaMemsetAsync(dc, 0xff, c_n * sizeof(float), stream));
+	v.run(stream);
+	CHECK_CUDA(cudaStreamSynchronize(stream));
+	std::vector<float> c(c_n);
+	CHECK_CUDA(cudaMemcpy(c.data(), dc, c_n * sizeof(float), cudaMemcpyDeviceToHost));
+	return sampled_error(a, b, c, m, n, k, 1000, v.bound);
+}
+
+// Times each variant's launches on the GPU alone. They are captured into a
+// CUDA graph between two event-record nodes, and replaying the graph runs
+// start event, kernels and stop event back to back on the GPU, so the time
+// between the events leaves out the host-side cost of launching, which
+// differs between cuBLAS and these kernels. 3 warmup replays per variant and
+// warm-up rounds until the GPU has been busy for `warmup_seconds`, then
+// interleaved rounds (rotating order), with the SM clock sampled after each.
+void time_graphs(std::vector<MatmulVariant>& variants, cudaStream_t stream, double warmup_seconds, double seconds,
+                 std::vector<double>& clocks) {
+	struct Replay {
+		cudaGraphExec_t exec = nullptr;
+		cudaEvent_t start = nullptr;
+		cudaEvent_t stop = nullptr;
+	};
+	std::vector<Replay> replays(variants.size());
+	for (std::size_t j=0; j<variants.size(); ++j) {
+		Replay& r = replays[j];
+		CHECK_CUDA(cudaEventCreate(&r.start));
+		CHECK_CUDA(cudaEventCreate(&r.stop));
+		cudaGraph_t graph;
+		CHECK_CUDA(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));
+		CHECK_CUDA(cudaEventRecordWithFlags(r.start, stream, cudaEventRecordExternal));
+		variants[j].run(stream);
+		CHECK_CUDA(cudaEventRecordWithFlags(r.stop, stream, cudaEventRecordExternal));
+		CHECK_CUDA(cudaStreamEndCapture(stream, &graph));
+		CHECK_CUDA(cudaGraphInstantiate(&r.exec, graph, 0));
+		CHECK_CUDA(cudaGraphDestroy(graph));
+	}
+	auto once = [&](std::size_t j) {
+		const Replay& r = replays[j];
+		CHECK_CUDA(cudaGraphLaunch(r.exec, stream));
+		CHECK_CUDA(cudaEventSynchronize(r.stop));
+		float ms = 0;
+		CHECK_CUDA(cudaEventElapsedTime(&ms, r.start, r.stop));
+		return static_cast<double>(ms);
+	};
+	for (std::size_t j=0; j<variants.size(); ++j) {
+		for (int i=0; i<3; ++i) once(j);
+	}
+	warm_up_for(warmup_seconds, [&] {
+		for (std::size_t j=0; j<variants.size(); ++j) once(j);
+	});
+	double round_ms = 0;
+	for (std::size_t j=0; j<variants.size(); ++j) round_ms += once(j);
+	const int rounds = std::clamp(static_cast<int>(seconds * 1000.0 / std::max(round_ms, 1e-3)), 10, 2000);
+	for (int r=0; r<rounds; ++r) {
+		for (std::size_t j=0; j<variants.size(); ++j) {
+			const std::size_t v = (j + static_cast<std::size_t>(r)) % variants.size();
+			variants[v].samples_ms.push_back(once(v));
+		}
+		clocks.push_back(cuda::current_sm_clock_mhz(0));  // sampled under load
+	}
+	for (Replay& r : replays) {
+		CHECK_CUDA(cudaGraphExecDestroy(r.exec));
+		CHECK_CUDA(cudaEventDestroy(r.start));
+		CHECK_CUDA(cudaEventDestroy(r.stop));
+	}
+}
+
+// The median over rounds of num's time / den's time in the same round.
+double paired_median(const MatmulVariant& num, const MatmulVariant& den) {
+	std::vector<double> r;
+	for (std::size_t i=0; i<num.samples_ms.size(); ++i) r.push_back(num.samples_ms[i] / den.samples_ms[i]);
+	std::sort(r.begin(), r.end());
+	return bench::percentile(r, 0.5);
+}
+
+double median_of(std::vector<double> v) {
+	std::sort(v.begin(), v.end());
+	return v.empty() ? 0.0 : v[v.size() / 2];
+}
+
+struct MatmulShape {
+	int m, k, n;
+	const char* label;
+};
+
+// A, B and C on the device, A and B uniform in [-1, 1], and kept on the host
+// for the correctness checks.
+struct MatmulOperands {
+	std::vector<float> a, b;
+	float* da = nullptr;
+	float* db = nullptr;
+	float* dc = nullptr;
+
+	explicit MatmulOperands(const MatmulShape& s)
+	    : a(uniform_values(static_cast<std::size_t>(s.m) * s.k, 1, -1.0f, 1.0f)),
+	      b(uniform_values(static_cast<std::size_t>(s.k) * s.n, 2, -1.0f, 1.0f)) {
+		CHECK_CUDA(cudaMalloc(&da, a.size() * sizeof(float)));
+		CHECK_CUDA(cudaMalloc(&db, b.size() * sizeof(float)));
+		CHECK_CUDA(cudaMalloc(&dc, static_cast<std::size_t>(s.m) * s.n * sizeof(float)));
+		CHECK_CUDA(cudaMemcpy(da, a.data(), a.size() * sizeof(float), cudaMemcpyHostToDevice));
+		CHECK_CUDA(cudaMemcpy(db, b.data(), b.size() * sizeof(float), cudaMemcpyHostToDevice));
+	}
+	MatmulOperands(const MatmulOperands&) = delete;
+	MatmulOperands& operator=(const MatmulOperands&) = delete;
+	~MatmulOperands() {
+		cudaFree(da);
+		cudaFree(db);
+		cudaFree(dc);
+	}
+};
 
 int run_matmul(const std::string& out_path, double warmup_seconds, double seconds) {
 	const cuda::DeviceInfo device = must(cuda::query_device(0), "query_device");
 	CHECK_CUDA(cudaSetDevice(0));
-	cudaStream_t stream;
-	CHECK_CUDA(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-	cublasHandle_t handle;
-	CHECK_CUBLAS(cublasCreate(&handle));
-	CHECK_CUBLAS(cublasSetStream(handle, stream));
-	// Plain FP32: no TF32 tensor cores (NVIDIA_TF32_OVERRIDE=0 is also set in
-	// main), so cuBLAS does the same arithmetic as the hand-written kernels.
-	CHECK_CUBLAS(cublasSetMathMode(handle, CUBLAS_DEFAULT_MATH));
-	// A workspace of cuBLAS's own, so it never allocates while being captured
-	// into a CUDA graph.
-	constexpr std::size_t kCublasWorkspace = 32u << 20;
-	void* cublas_workspace;
-	CHECK_CUDA(cudaMalloc(&cublas_workspace, kCublasWorkspace));
-	CHECK_CUBLAS(cublasSetWorkspace(handle, cublas_workspace, kCublasWorkspace));
+	const Stream stream;
+	// Plain FP32 (NVIDIA_TF32_OVERRIDE=0 is also set in main), so cuBLAS does
+	// the same arithmetic as the hand-written kernels.
+	const Cublas cublas(stream);
 
 	const double max_clock = device.max_sm_clock_mhz > 0 ? device.max_sm_clock_mhz : device.sm_clock_mhz;
 	const double peak_at_max_clock = device.peak_fp32_gflops(max_clock);
 	std::vector<double> clocks;
 
-	struct Shape3 {
-		int m, k, n;
-		const char* label;
-	};
-	const std::vector<Shape3> shapes = {
+	const std::vector<MatmulShape> shapes = {
 		{512, 512, 512, "512^3"},
 		{640, 640, 640, "640^3"},
 		{1024, 1024, 1024, "1024^3"},
@@ -370,18 +557,11 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 	json.key("results").begin_array();
 	std::printf("%-36s %-19s %10s %10s %11s %10s\n", "shape (m x k x n)", "kernel", "median ms", "GFLOP/s",
 	            "% of peak", "% cuBLAS");
-	for (const Shape3& s : shapes) {
-		const std::size_t a_n = static_cast<std::size_t>(s.m) * s.k;
-		const std::size_t b_n = static_cast<std::size_t>(s.k) * s.n;
-		const std::size_t c_n = static_cast<std::size_t>(s.m) * s.n;
-		const std::vector<float> a = uniform_values(a_n, 1, -1.0f, 1.0f);
-		const std::vector<float> b = uniform_values(b_n, 2, -1.0f, 1.0f);
-		float *da, *db, *dc;
-		CHECK_CUDA(cudaMalloc(&da, a_n * sizeof(float)));
-		CHECK_CUDA(cudaMalloc(&db, b_n * sizeof(float)));
-		CHECK_CUDA(cudaMalloc(&dc, c_n * sizeof(float)));
-		CHECK_CUDA(cudaMemcpy(da, a.data(), a_n * sizeof(float), cudaMemcpyHostToDevice));
-		CHECK_CUDA(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice));
+	for (const MatmulShape& s : shapes) {
+		const MatmulOperands ops(s);
+		float* const da = ops.da;
+		float* const db = ops.db;
+		float* const dc = ops.dc;
 
 		// Split-K's splits for this shape and the workspace for its partial products.
 		const int splits = cuda::split_k_splits(s.m, s.n, s.k, device.sm_count);
@@ -396,88 +576,27 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 			variants.push_back({cuda::matmul_kernel_name(kernel), [=](cudaStream_t st) {
 				                    CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, st, splits,
 				                                                   workspace));
-			                    }, {}});
+			                    }, "fp32", fp32_bound(s.k), {}, {}});
 		}
-		variants.push_back({"cublas", [=](cudaStream_t) {
-			                    const float alpha = 1.0f, beta = 0.0f;
-			                    // Row-major C = A B is column-major C^T = B^T A^T.
-			                    CHECK_CUBLAS(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, s.n, s.m, s.k, &alpha, db, s.n,
-			                                             da, s.k, &beta, dc, s.n));
-		                    }, {}});
+		variants.push_back({"cublas", [&cublas, da, db, dc, s](cudaStream_t) { cublas.sgemm(da, db, dc, s.m, s.n, s.k); },
+		                    "fp32", fp32_bound(s.k), {}, {}});
 
 		// Correctness first: every variant, cuBLAS included, against float64.
-		std::vector<float> c(c_n);
 		for (MatmulVariant& v : variants) {
-			CHECK_CUDA(cudaMemsetAsync(dc, 0xff, c_n * sizeof(float), stream));  // NaN, so a no-op kernel fails
-			v.run(stream);
-			CHECK_CUDA(cudaStreamSynchronize(stream));
-			CHECK_CUDA(cudaMemcpy(c.data(), dc, c_n * sizeof(float), cudaMemcpyDeviceToHost));
-			if (!within_error_bound(a, b, c, s.m, s.n, s.k, 1000)) {
+			if (!run_and_check(v, stream, ops.a, ops.b, dc, s.m, s.n, s.k).within_bound) {
 				std::fprintf(stderr, "%s gives wrong results for %s\n", v.name.c_str(), s.label);
 				return 1;
 			}
 		}
 
-		// Each variant's launches are captured into a CUDA graph between two
-		// event-record nodes. Replaying the graph runs start event, kernels and
-		// stop event back to back on the GPU, so the time between the events is
-		// GPU execution alone: the host-side cost of launching, which differs
-		// between cuBLAS and these kernels, is left out for all of them.
-		for (MatmulVariant& v : variants) {
-			CHECK_CUDA(cudaEventCreate(&v.start));
-			CHECK_CUDA(cudaEventCreate(&v.stop));
-			cudaGraph_t graph;
-			CHECK_CUDA(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));
-			CHECK_CUDA(cudaEventRecordWithFlags(v.start, stream, cudaEventRecordExternal));
-			v.run(stream);
-			CHECK_CUDA(cudaEventRecordWithFlags(v.stop, stream, cudaEventRecordExternal));
-			CHECK_CUDA(cudaStreamEndCapture(stream, &graph));
-			CHECK_CUDA(cudaGraphInstantiate(&v.exec, graph, 0));
-			CHECK_CUDA(cudaGraphDestroy(graph));
-		}
-		auto once = [&](MatmulVariant& v) {
-			CHECK_CUDA(cudaGraphLaunch(v.exec, stream));
-			CHECK_CUDA(cudaEventSynchronize(v.stop));
-			float ms = 0;
-			CHECK_CUDA(cudaEventElapsedTime(&ms, v.start, v.stop));
-			return static_cast<double>(ms);
-		};
-		for (MatmulVariant& v : variants) {
-			for (int i=0; i<3; ++i) once(v);
-		}
-		warm_up_for(warmup_seconds, [&] {
-			for (MatmulVariant& v : variants) once(v);
-		});
-		double round_ms = 0;
-		for (MatmulVariant& v : variants) round_ms += once(v);
-		const int rounds = std::clamp(static_cast<int>(seconds * 1000.0 / std::max(round_ms, 1e-3)), 10, 2000);
 		const std::size_t first_clock = clocks.size();
-		for (int r=0; r<rounds; ++r) {
-			for (std::size_t j=0; j<variants.size(); ++j) {
-				MatmulVariant& v = variants[(j + static_cast<std::size_t>(r)) % variants.size()];
-				v.samples_ms.push_back(once(v));
-			}
-			clocks.push_back(cuda::current_sm_clock_mhz(0));  // sampled under load
-		}
-		for (MatmulVariant& v : variants) {
-			CHECK_CUDA(cudaGraphExecDestroy(v.exec));
-			CHECK_CUDA(cudaEventDestroy(v.start));
-			CHECK_CUDA(cudaEventDestroy(v.stop));
-		}
-
-		auto paired = [&](const MatmulVariant& num, const MatmulVariant& den) {
-			std::vector<double> r;
-			for (std::size_t i=0; i<num.samples_ms.size(); ++i) r.push_back(num.samples_ms[i] / den.samples_ms[i]);
-			std::sort(r.begin(), r.end());
-			return bench::percentile(r, 0.5);
-		};
-		std::vector<double> shape_clocks(clocks.begin() + static_cast<std::ptrdiff_t>(first_clock), clocks.end());
-		std::sort(shape_clocks.begin(), shape_clocks.end());
-		const double clock_now = shape_clocks.empty() ? 0.0 : shape_clocks[shape_clocks.size() / 2];
+		time_graphs(variants, stream, warmup_seconds, seconds, clocks);
+		const double clock_now =
+		    median_of(std::vector<double>(clocks.begin() + static_cast<std::ptrdiff_t>(first_clock), clocks.end()));
 		const double peak_now = clock_now > 0 ? device.peak_fp32_gflops(clock_now) : 0.0;
 		const double flops = 2.0 * s.m * s.n * s.k;
 		const MatmulVariant& naive = variants[0];
-		const MatmulVariant& cublas = variants.back();
+		const MatmulVariant& sgemm = variants.back();
 		const std::string picks = cuda::matmul_kernel_name(
 		    cuda::resolve_matmul_kernel(cuda::MatmulKernel::Auto, s.m, s.n, s.k, device.sm_count));
 		json.begin_object();
@@ -490,30 +609,24 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 		for (const MatmulVariant& v : variants) {
 			const bench::TimingStats t = bench::summarize(v.samples_ms, 3);
 			const double gflops = flops / (t.median_ms * 1e6);
-			const double of_cublas = 100.0 * paired(cublas, v);  // cuBLAS time / this time
+			const double of_cublas = 100.0 * paired_median(sgemm, v);  // cuBLAS time / this time
 			json.begin_object();
 			json.field("kernel", v.name);
 			json.timing("timing", t);
 			json.field("gflops", gflops).field("percent_of_peak_at_max_clock", 100.0 * gflops / peak_at_max_clock);
 			if (peak_now > 0) json.field("percent_of_peak_at_measured_clock", 100.0 * gflops / peak_now);
-			json.field("percent_of_cublas", of_cublas).field("speedup_over_naive", paired(naive, v));
+			json.field("percent_of_cublas", of_cublas).field("speedup_over_naive", paired_median(naive, v));
 			json.end_object();
 			std::printf("%-36s %-19s %10.3f %10.0f %10.1f%% %9.1f%%%s\n", s.label, v.name.c_str(), t.median_ms,
 			            gflops, 100.0 * gflops / peak_at_max_clock, of_cublas, v.name == picks ? "  <- picked" : "");
 		}
 		json.end_array();
 		json.end_object();
-		CHECK_CUDA(cudaFree(da));
-		CHECK_CUDA(cudaFree(db));
-		CHECK_CUDA(cudaFree(dc));
 		if (workspace) CHECK_CUDA(cudaFree(workspace));
 	}
 	json.end_array();
 	bench::write_device(json, device, clocks);
 	json.end_object();
-	CHECK_CUBLAS(cublasDestroy(handle));
-	CHECK_CUDA(cudaFree(cublas_workspace));
-	CHECK_CUDA(cudaStreamDestroy(stream));
 
 	std::ofstream out(out_path, std::ios::binary);
 	out << json.str();
@@ -532,12 +645,8 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 int run_profile(const std::string& graph_dir, const std::string& only, bool list) {
 	const cuda::DeviceInfo device = must(cuda::query_device(0), "query_device");
 	CHECK_CUDA(cudaSetDevice(0));
-	cudaStream_t stream;
-	CHECK_CUDA(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
-	cublasHandle_t handle;
-	CHECK_CUBLAS(cublasCreate(&handle));
-	CHECK_CUBLAS(cublasSetStream(handle, stream));
-	CHECK_CUBLAS(cublasSetMathMode(handle, CUBLAS_DEFAULT_MATH));
+	const Stream stream;
+	const Cublas cublas(stream);  // set up as in the timed suites, so that it picks the same kernels
 	auto profiled = [&](const std::string& label, const std::function<void()>& launch) {
 		if (!only.empty() && label != only) return;
 		if (list) {
@@ -569,21 +678,13 @@ int run_profile(const std::string& graph_dir, const std::string& only, bool list
 
 	// Every matmul kernel and cuBLAS on a large and a small square and on the
 	// small-output, long-K layer of the B=128 MLP block.
-	struct Shape3 {
-		int m, k, n;
-	};
-	for (const Shape3& s : {Shape3{2048, 2048, 2048}, Shape3{512, 512, 512}, Shape3{128, 2048, 512}}) {
+	for (const MatmulShape& s : {MatmulShape{2048, 2048, 2048, ""}, MatmulShape{512, 512, 512, ""},
+	                             MatmulShape{128, 2048, 512, ""}}) {
 		const std::string label = "matmul_" + std::to_string(s.m) + "x" + std::to_string(s.k) + "x" + std::to_string(s.n);
-		const std::size_t a_n = static_cast<std::size_t>(s.m) * s.k;
-		const std::size_t b_n = static_cast<std::size_t>(s.k) * s.n;
-		const std::vector<float> a = uniform_values(a_n, 1, -1.0f, 1.0f);
-		const std::vector<float> b = uniform_values(b_n, 2, -1.0f, 1.0f);
-		float *da, *db, *dc;
-		CHECK_CUDA(cudaMalloc(&da, a_n * sizeof(float)));
-		CHECK_CUDA(cudaMalloc(&db, b_n * sizeof(float)));
-		CHECK_CUDA(cudaMalloc(&dc, static_cast<std::size_t>(s.m) * s.n * sizeof(float)));
-		CHECK_CUDA(cudaMemcpy(da, a.data(), a_n * sizeof(float), cudaMemcpyHostToDevice));
-		CHECK_CUDA(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice));
+		const MatmulOperands ops(s);
+		float* const da = ops.da;
+		float* const db = ops.db;
+		float* const dc = ops.dc;
 		const int splits = cuda::split_k_splits(s.m, s.n, s.k, device.sm_count);
 		const std::size_t workspace_bytes = cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, s.m, s.n, splits);
 		float* workspace = nullptr;
@@ -596,18 +697,9 @@ int run_profile(const std::string& graph_dir, const std::string& only, bool list
 				CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, stream, splits, workspace));
 			});
 		}
-		profiled(label + ".cublas", [&] {
-			const float alpha = 1.0f, beta = 0.0f;
-			CHECK_CUBLAS(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, s.n, s.m, s.k, &alpha, db, s.n, da, s.k, &beta,
-			                         dc, s.n));
-		});
+		profiled(label + ".cublas", [&] { cublas.sgemm(da, db, dc, s.m, s.n, s.k); });
 		if (workspace) CHECK_CUDA(cudaFree(workspace));
-		CHECK_CUDA(cudaFree(da));
-		CHECK_CUDA(cudaFree(db));
-		CHECK_CUDA(cudaFree(dc));
 	}
-	CHECK_CUBLAS(cublasDestroy(handle));
-	CHECK_CUDA(cudaStreamDestroy(stream));
 	if (!list) std::printf("profiled on %s (%d SMs)\n", device.name.c_str(), device.sm_count);
 	return 0;
 }
