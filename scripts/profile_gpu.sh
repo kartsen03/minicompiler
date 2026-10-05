@@ -6,14 +6,14 @@
 # split every call's wall time into the GPU kernels it ran and the rest.
 # Needs nsys, a build with the CUDA backend (BUILD_DIR, default build) and a
 # Python with a CUDA build of torch (PYTHON). The .nsys-rep file is kept in
-# OUT_DIR (default /tmp/minicompiler-nsys); it is large and not committed.
+# OUT_DIR (default ~/.cache/minicompiler-nsys); it is large and not committed.
 #
 #   scripts/profile_gpu.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BUILD_DIR=${BUILD_DIR:-build}
 PYTHON=${PYTHON:-python3}
-OUT_DIR=${OUT_DIR:-/tmp/minicompiler-nsys}
+OUT_DIR=${OUT_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/minicompiler-nsys}
 DOCS=docs/profiling/gpu
 
 cmake --build "$BUILD_DIR" -j "$(nproc)" --target minicompiler_capi > /dev/null
