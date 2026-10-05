@@ -21,6 +21,9 @@ const char* matmul_kernel_name(MatmulKernel kernel) {
 		case MatmulKernel::Vectorized: return "vectorized";
 		case MatmulKernel::DoubleBuffered: return "double_buffered";
 		case MatmulKernel::SplitK: return "split_k";
+		case MatmulKernel::TensorCoreTf32: return "tensor_core_tf32";
+		case MatmulKernel::TensorCoreBf16: return "tensor_core_bf16";
+		case MatmulKernel::TensorCoreF16: return "tensor_core_f16";
 	}
 	return "?";
 }
@@ -28,12 +31,13 @@ const char* matmul_kernel_name(MatmulKernel kernel) {
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name) {
 	for (MatmulKernel k : {MatmulKernel::Auto, MatmulKernel::Naive, MatmulKernel::Tiled,
 	                       MatmulKernel::RegisterTiled128, MatmulKernel::RegisterTiled64, MatmulKernel::Vectorized,
-	                       MatmulKernel::DoubleBuffered, MatmulKernel::SplitK}) {
+	                       MatmulKernel::DoubleBuffered, MatmulKernel::SplitK, MatmulKernel::TensorCoreTf32,
+	                       MatmulKernel::TensorCoreBf16, MatmulKernel::TensorCoreF16}) {
 		if (name == matmul_kernel_name(k)) return k;
 	}
 	return Error{"unknown matmul kernel '" + name +
 	             "' (auto, naive, tiled, register_tiled_128, register_tiled_64, vectorized, double_buffered, "
-	             "split_k)"};
+	             "split_k, tensor_core_tf32, tensor_core_bf16, tensor_core_f16)"};
 }
 
 MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int k, int sm_count) {
@@ -262,6 +266,14 @@ private:
 			launch.k = static_cast<int>(a[1]);
 			launch.n = static_cast<int>(node.type.shape[1]);
 			launch.matmul = resolve_matmul_kernel(options_.matmul, launch.m, launch.n, launch.k, device_.sm_count);
+			const bool tensor_core = launch.matmul == MatmulKernel::TensorCoreTf32 ||
+			                         launch.matmul == MatmulKernel::TensorCoreBf16 ||
+			                         launch.matmul == MatmulKernel::TensorCoreF16;
+			if (tensor_core && !tensor_core_supported(launch.matmul)) {
+				return Error{std::string("matmul kernel '") + matmul_kernel_name(launch.matmul) + "' does not run on " +
+				             device_.name + " with this build: TF32 and BF16 need compute capability 8.0 and FP16 "
+				             "7.0, in the GPU and in CMAKE_CUDA_ARCHITECTURES"};
+			}
 			if (launch.matmul == MatmulKernel::SplitK) {
 				launch.splits = split_k_splits(launch.m, launch.n, launch.k, device_.sm_count);
 				const std::size_t bytes = matmul_workspace_bytes(launch.matmul, launch.m, launch.n, launch.splits);

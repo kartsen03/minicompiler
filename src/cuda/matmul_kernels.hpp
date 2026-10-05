@@ -25,4 +25,14 @@ std::size_t matmul_workspace_bytes(MatmulKernel kernel, int m, int n, int splits
 cudaError_t launch_matmul(MatmulKernel kernel, const float* a, const float* b, float* c, int m, int n, int k,
                           cudaStream_t stream, int splits = 1, float* workspace = nullptr);
 
+// Whether a TensorCore* kernel runs on the current GPU: the GPU has its format
+// (TF32 and BF16: compute capability 8.0; FP16: 7.0) and the build has code
+// for it compiled for such an architecture. Launching one that does not run
+// fails with cudaErrorNotSupported.
+bool tensor_core_supported(MatmulKernel kernel);
+
+// The TensorCore* kernels (matmul_tensor_core.cu); launch_matmul forwards to it.
+cudaError_t launch_tensor_core(MatmulKernel kernel, const float* a, const float* b, float* c, int m, int n, int k,
+                               cudaStream_t stream);
+
 }

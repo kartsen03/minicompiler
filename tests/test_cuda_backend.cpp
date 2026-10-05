@@ -161,6 +161,83 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 	}
 }
 
+TEST(CudaBackend, TensorCoreMatmulsAreWithinTheirPrecisionBounds) {
+	REQUIRE_GPU();
+	// Rounding an input to the format costs at most its unit roundoff u, so
+	// each product is within (2u + u^2)|a b| of the exact one. Accumulating k
+	// of them in FP32 adds up to gamma_k sum|a b|; doubled here, because tensor
+	// cores have been measured to round toward zero, not to nearest, when they
+	// accumulate (Fasi et al., "Numerical behavior of NVIDIA tensor cores",
+	// PeerJ Computer Science, 2021). FP16 loses absolute accuracy below its
+	// smallest normal (2^-14), at most 2^-25 per rounded input.
+	struct Case {
+		cuda::MatmulKernel kernel;
+		double u;
+		bool subnormals;
+	};
+	const Case cases[] = {{cuda::MatmulKernel::TensorCoreTf32, std::ldexp(1.0, -11), false},
+	                      {cuda::MatmulKernel::TensorCoreBf16, std::ldexp(1.0, -8), false},
+	                      {cuda::MatmulKernel::TensorCoreF16, std::ldexp(1.0, -11), true}};
+	const std::vector<std::array<std::int64_t, 3>> shapes = {
+		{1, 1, 1},       {3, 5, 7},       {33, 257, 65},  {127, 129, 131}, {128, 128, 128},
+		{129, 33, 129},  {16, 4099, 16},  {300, 1004, 36}, {2, 12, 4},     {256, 256, 256}};
+	const double u32 = std::ldexp(1.0, -24);
+	int tested = 0;
+	for (const Case& tc : cases) {
+		if (!cuda::tensor_core_supported(tc.kernel)) continue;
+		++tested;
+		cuda::CudaOptions options;
+		options.matmul = tc.kernel;
+		for (const auto& [m, k, n] : shapes) {
+			GraphBuilder b("mm");
+			NodeId a = b.input("a", {m, k});
+			NodeId w = b.input("w", {k, n});
+			b.output(b.matmul(a, w));
+			Graph g = std::move(b).build().value();
+			auto inputs = make_random_inputs(g, 3);
+			std::vector<HostTensor> gpu;
+			ASSERT_TRUE(cuda::compile_for_cuda(g, options).value()->run(inputs, gpu).ok());
+			const double gamma = static_cast<double>(k) * u32 / (1.0 - static_cast<double>(k) * u32);
+			const double tiny = tc.subnormals ? 2.0 * static_cast<double>(k) * std::ldexp(1.0, -25) : 0.0;
+			for (std::int64_t r=0; r<m; ++r) {
+				for (std::int64_t c=0; c<n; ++c) {
+					double exact = 0.0, abs_dot = 0.0;
+					for (std::int64_t t=0; t<k; ++t) {
+						const double p = inputs[0].data[r * k + t] * static_cast<double>(inputs[1].data[t * n + c]);
+						exact += p;
+						abs_dot += std::fabs(p);
+					}
+					const double bound = (2.0 * tc.u + tc.u * tc.u + 2.0 * gamma) * abs_dot + 2.0 * u32 * std::fabs(exact) + tiny;
+					ASSERT_LE(std::fabs(gpu[0].data[r * n + c] - exact), bound)
+					    << cuda::matmul_kernel_name(tc.kernel) << " " << m << "x" << k << "x" << n << " at (" << r << ", "
+					    << c << ")";
+				}
+			}
+		}
+	}
+	if (tested == 0) GTEST_SKIP() << "no tensor-core format on this GPU";
+}
+
+TEST(CudaBackend, TensorCoreKernelsThatCannotRunFailToCompile) {
+	REQUIRE_GPU();
+	// A tensor-core kernel the GPU lacks, or that this build compiled only for
+	// older architectures (where its body is empty), is an error at compile
+	// time rather than a kernel that leaves C unwritten.
+	GraphBuilder b("mm");
+	b.output(b.matmul(b.input("a", {64, 64}), b.input("w", {64, 64})));
+	Graph g = std::move(b).build().value();
+	for (const cuda::MatmulKernel kernel :
+	     {cuda::MatmulKernel::TensorCoreTf32, cuda::MatmulKernel::TensorCoreBf16, cuda::MatmulKernel::TensorCoreF16}) {
+		cuda::CudaOptions options;
+		options.matmul = kernel;
+		Result<std::unique_ptr<cuda::CudaExecutable>> exe = cuda::compile_for_cuda(g, options);
+		EXPECT_EQ(exe.ok(), cuda::tensor_core_supported(kernel)) << cuda::matmul_kernel_name(kernel);
+		if (!exe.ok()) {
+			EXPECT_NE(exe.error().message.find(cuda::matmul_kernel_name(kernel)), std::string::npos);
+		}
+	}
+}
+
 TEST(CudaBackend, SplitKIsWithinTheDotProductErrorBoundForAnySplitCount) {
 	REQUIRE_GPU();
 	// Forced split counts, where the rule would pick one per shape: more splits
@@ -236,7 +313,8 @@ TEST(CudaBackend, MatmulKernelNamesRoundTrip) {
 	for (const cuda::MatmulKernel kernel :
 	     {cuda::MatmulKernel::Auto, cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
 	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized,
-	      cuda::MatmulKernel::DoubleBuffered, cuda::MatmulKernel::SplitK}) {
+	      cuda::MatmulKernel::DoubleBuffered, cuda::MatmulKernel::SplitK, cuda::MatmulKernel::TensorCoreTf32,
+	      cuda::MatmulKernel::TensorCoreBf16, cuda::MatmulKernel::TensorCoreF16}) {
 		Result<cuda::MatmulKernel> parsed = cuda::matmul_kernel_from_name(cuda::matmul_kernel_name(kernel));
 		ASSERT_TRUE(parsed.ok());
 		EXPECT_EQ(parsed.value(), kernel);

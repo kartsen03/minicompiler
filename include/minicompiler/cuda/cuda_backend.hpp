@@ -26,12 +26,20 @@ enum class MatmulKernel {
 	Vectorized,        // RegisterTiled128 with 128-bit global and shared-memory loads and a transposed A tile
 	DoubleBuffered,    // Vectorized, loading the next tile while computing the current one
 	SplitK,            // DoubleBuffered with K split across blocks when the output has too few tiles to fill the GPU
+	// Tensor cores (WMMA), opt-in because they are not FP32: the inputs are
+	// rounded to TF32 or FP16 (unit roundoff 2^-11) or BF16 (2^-8) and the
+	// products accumulated in FP32, so each output is within about
+	// (2u + k 2^-24) sum|a b| of the exact dot product. TF32 and BF16 need
+	// compute capability 8.0, FP16 7.0.
+	TensorCoreTf32,
+	TensorCoreBf16,
+	TensorCoreF16,
 };
 
 const char* matmul_kernel_name(MatmulKernel kernel);
 
-// "auto", "naive", "tiled", "register_tiled_128", "register_tiled_64", "vectorized", "double_buffered" or
-// "split_k".
+// "auto", "naive", "tiled", "register_tiled_128", "register_tiled_64", "vectorized", "double_buffered",
+// "split_k", "tensor_core_tf32", "tensor_core_bf16" or "tensor_core_f16".
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name);
 
 // The kernel that computes an m x n x k matmul on a GPU with `sm_count` SMs.

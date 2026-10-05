@@ -35,6 +35,7 @@ if(MINICOMPILER_HAVE_CUDA)
         cuda/device_info.cpp
         cuda/kernel_compiler.cpp
         cuda/matmul_kernels.cu
+        cuda/matmul_tensor_core.cu
     )
     target_compile_definitions(minicompiler PUBLIC MINICOMPILER_HAVE_CUDA=1)
     target_compile_options(minicompiler PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-lineinfo>)

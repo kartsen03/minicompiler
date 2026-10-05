@@ -1,5 +1,7 @@
 #include "cuda/matmul_kernels.hpp"
 
+#include "cuda/matmul_common.cuh"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -153,27 +155,6 @@ constexpr int kVecBM = 128;
 constexpr int kVecBN = 128;
 constexpr int kVecThreads = 256;
 constexpr int kAPad = 4;
-
-// Four consecutive elements of a row-major matrix with row stride `stride`,
-// from (row, col); zero for rows at or past row_end and columns at or past
-// col_end.
-template <bool kVec>
-__device__ __forceinline__ float4 load4(const float* __restrict__ p, int row, int col, int row_end, int col_end,
-                                        int stride) {
-	float4 v = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-	if (row >= row_end) return v;
-	const float* src = p + static_cast<std::ptrdiff_t>(row) * stride + col;
-	if constexpr (kVec) {
-		// col and col_end are multiples of 4: the 4 elements are all in range or all out.
-		if (col < col_end) v = *reinterpret_cast<const float4*>(src);
-	} else {
-		if (col + 0 < col_end) v.x = src[0];
-		if (col + 1 < col_end) v.y = src[1];
-		if (col + 2 < col_end) v.z = src[2];
-		if (col + 3 < col_end) v.w = src[3];
-	}
-	return v;
-}
 
 // This thread's share of the A tile (BK/8 float4 of 4 consecutive k) and of
 // the B tile (BK/8 float4 of 4 consecutive columns) starting at k0, with K
@@ -333,15 +314,6 @@ sum_splits(const float* __restrict__ partial, float* __restrict__ c, std::size_t
 	}
 }
 
-bool aligned16(const void* p) {
-	return reinterpret_cast<std::uintptr_t>(p) % 16 == 0;
-}
-
-// float4 access needs every row of A, B and C to start 16-byte aligned.
-bool rows_aligned(const float* a, const float* b, const float* c, int n, int k) {
-	return n % 4 == 0 && k % 4 == 0 && aligned16(a) && aligned16(b) && aligned16(c);
-}
-
 // K per split: whole tiles, so every split but the last covers the same K.
 int split_size(int k, int splits, int bk) {
 	return splits > 1 ? ((k + splits - 1) / splits + bk - 1) / bk * bk : std::max(k, 1);
@@ -423,6 +395,9 @@ cudaError_t launch_matmul(MatmulKernel kernel, const float* a, const float* b, f
 		case MatmulKernel::Vectorized: return launch_vectorized<8, false>(a, b, c, m, n, k, stream);
 		case MatmulKernel::DoubleBuffered: return launch_vectorized<8, true>(a, b, c, m, n, k, stream);
 		case MatmulKernel::SplitK: return launch_vectorized<8, true>(a, b, c, m, n, k, stream, splits, workspace);
+		case MatmulKernel::TensorCoreTf32:
+		case MatmulKernel::TensorCoreBf16:
+		case MatmulKernel::TensorCoreF16: return launch_tensor_core(kernel, a, b, c, m, n, k, stream);
 		case MatmulKernel::Auto: break;  // must be resolved to a kernel first
 	}
 	return cudaErrorInvalidValue;
