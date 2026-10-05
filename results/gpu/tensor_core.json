@@ -1,0 +1,3529 @@
+{
+  "benchmark": "Tensor-core matmul C[m,n] = A[m,k] B[k,n] on FP32 matrices (row-major): the TF32, BF16 and FP16 kernels against cuBLAS with the same input format, and against FP32 (the backend's default kernel and cuBLAS SGEMM)",
+  "method": "GPU time of each variant's launches, from event-record nodes captured with them into a CUDA graph and replayed on one stream, as in matmul.json; 3 warmup runs per variant and warm-up rounds until the GPU has been busy for warmup_seconds, then interleaved rounds (shuffled order); time = median over rounds; TFLOP/s = 2mnk / time; ratios are medians over rounds of per-round ratios. Each result is checked on 1000 sampled elements against a float64 dot product: FP32 variants within gamma_k sum|ab| + u|exact|, the others within (2u' + u'^2 + 2 gamma_k) sum|ab| + 2 u32 |exact| (+ 2k 2^-24 for FP16), u' = 2u allowing truncated inputs; max_error_over_abs_dot is the largest |c - exact| / sum|ab| among the samples. cuBLAS runs cublasSgemm in CUBLAS_DEFAULT_MATH (FP32) and cublasGemmEx on the FP32 matrices with the compute type of each format, which rounds the inputs to it and accumulates in FP32, as the kernels here do; NVIDIA_TF32_OVERRIDE is unset",
+  "warmup_seconds": 1,
+  "seconds_per_config": 2,
+  "environment": {
+    "commit": "bcf8b0a",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "hardware_threads": 20,
+    "os": "Ubuntu 24.04.4 LTS, kernel 6.6.114.1-microsoft-standard-WSL2",
+    "compiler": "gcc 13.3.0",
+    "eigen": "3.4.0",
+    "build_flags": "Release, march_native=ON",
+    "threads": "1 (Eigen without OpenMP)",
+    "host_power_plan": "Turbo"
+  },
+  "formats": [
+    {
+      "format": "tf32",
+      "kernel": "tensor_core_tf32",
+      "cublas_compute_type": "CUBLAS_COMPUTE_32F_FAST_TF32",
+      "unit_roundoff": 0.000488281,
+      "runs_here": true
+    },
+    {
+      "format": "bf16",
+      "kernel": "tensor_core_bf16",
+      "cublas_compute_type": "CUBLAS_COMPUTE_32F_FAST_16BF",
+      "unit_roundoff": 0.00390625,
+      "runs_here": true
+    },
+    {
+      "format": "f16",
+      "kernel": "tensor_core_f16",
+      "cublas_compute_type": "CUBLAS_COMPUTE_32F_FAST_16F",
+      "unit_roundoff": 0.000488281,
+      "runs_here": true
+    }
+  ],
+  "device": {
+    "name": "NVIDIA GeForce RTX 3060 Laptop GPU",
+    "compute_capability": "8.6",
+    "sm_count": 30,
+    "fp32_lanes_per_sm": 128,
+    "sm_clock_mhz_cuda_attribute": 1425,
+    "max_sm_clock_mhz_nvml": 2100,
+    "mem_clock_mhz": 7001,
+    "bus_width_bits": 192,
+    "peak_bandwidth_gbs": 336.048,
+    "cuda_runtime": 13010,
+    "cuda_driver": 13010,
+    "sm_clock_mhz_during_run": {
+      "min": 900,
+      "median_of_run_medians": 1597,
+      "max": 1987
+    }
+  },
+  "runs": 3,
+  "commits": [
+    "bcf8b0a"
+  ],
+  "results": [
+    {
+      "shape": "1024^3",
+      "m": 1024,
+      "k": 1024,
+      "n": 1024,
+      "auto_picks": "double_buffered",
+      "split_k_splits": 1,
+      "tensor_core_splits": {
+        "bf16": 1,
+        "f16": 1,
+        "tf32": 1
+      },
+      "sm_clock_mhz_median": {
+        "median": 1575,
+        "min": 1552,
+        "max": 1702,
+        "runs": [
+          1702,
+          1552,
+          1575
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.442272,
+            "min": 0.406432,
+            "max": 0.44544,
+            "runs": [
+              0.406432,
+              0.44544,
+              0.442272
+            ]
+          },
+          "tflops": {
+            "median": 4.85557,
+            "min": 4.82104,
+            "max": 5.28375,
+            "runs": [
+              5.28375,
+              4.82104,
+              4.85557
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 74.8896,
+            "min": 74.7301,
+            "max": 75.2381,
+            "runs": [
+              75.2381,
+              74.8896,
+              74.7301
+            ]
+          },
+          "max_error_over_abs_dot": 1.11587e-07
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.340992,
+            "min": 0.31104,
+            "max": 0.342016,
+            "runs": [
+              0.31104,
+              0.342016,
+              0.340992
+            ]
+          },
+          "tflops": {
+            "median": 6.29775,
+            "min": 6.2789,
+            "max": 6.9042,
+            "runs": [
+              6.9042,
+              6.2789,
+              6.29775
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.3353,
+            "min": 1.32911,
+            "max": 1.33815,
+            "runs": [
+              1.32911,
+              1.3353,
+              1.33815
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 4.42802e-08
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.37888,
+            "min": 0.347136,
+            "max": 0.380928,
+            "runs": [
+              0.347136,
+              0.380928,
+              0.37888
+            ]
+          },
+          "tflops": {
+            "median": 5.66798,
+            "min": 5.63751,
+            "max": 6.18629,
+            "runs": [
+              6.18629,
+              5.63751,
+              5.66798
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.16901,
+            "min": 1.16871,
+            "max": 1.16942,
+            "runs": [
+              1.16871,
+              1.16942,
+              1.16901
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 81.9672,
+            "min": 81.8686,
+            "max": 82.6493,
+            "runs": [
+              82.6493,
+              81.9672,
+              81.8686
+            ]
+          },
+          "max_error_over_abs_dot": 3.5853e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.317808,
+            "min": 0.29184,
+            "max": 0.321408,
+            "runs": [
+              0.29184,
+              0.321408,
+              0.317808
+            ]
+          },
+          "tflops": {
+            "median": 6.75717,
+            "min": 6.68149,
+            "max": 7.35843,
+            "runs": [
+              7.35843,
+              6.68149,
+              6.75717
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.42398,
+            "min": 1.41251,
+            "max": 1.42857,
+            "runs": [
+              1.41251,
+              1.42398,
+              1.42857
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.59002e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.239568,
+            "min": 0.22016,
+            "max": 0.24064,
+            "runs": [
+              0.22016,
+              0.24064,
+              0.239568
+            ]
+          },
+          "tflops": {
+            "median": 8.96398,
+            "min": 8.92405,
+            "max": 9.7542,
+            "runs": [
+              9.7542,
+              8.92405,
+              8.96398
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.84976,
+            "min": 1.84687,
+            "max": 1.85153,
+            "runs": [
+              1.84687,
+              1.85153,
+              1.84976
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 78.9238,
+            "min": 78.4943,
+            "max": 80.0905,
+            "runs": [
+              80.0905,
+              78.9238,
+              78.4943
+            ]
+          },
+          "max_error_over_abs_dot": 0.00029047
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.192448,
+            "min": 0.178176,
+            "max": 0.201728,
+            "runs": [
+              0.178176,
+              0.201728,
+              0.192448
+            ]
+          },
+          "tflops": {
+            "median": 11.1588,
+            "min": 10.6454,
+            "max": 12.0526,
+            "runs": [
+              12.0526,
+              10.6454,
+              11.1588
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.33725,
+            "min": 2.30576,
+            "max": 2.35509,
+            "runs": [
+              2.30576,
+              2.33725,
+              2.35509
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000290493
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.206704,
+            "min": 0.18944,
+            "max": 0.20776,
+            "runs": [
+              0.18944,
+              0.20776,
+              0.206704
+            ]
+          },
+          "tflops": {
+            "median": 10.3892,
+            "min": 10.3364,
+            "max": 11.336,
+            "runs": [
+              11.336,
+              10.3364,
+              10.3892
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.14644,
+            "min": 2.14108,
+            "max": 2.14663,
+            "runs": [
+              2.14108,
+              2.14663,
+              2.14644
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 91.5827,
+            "min": 91.1841,
+            "max": 92.7835,
+            "runs": [
+              92.7835,
+              91.5827,
+              91.1841
+            ]
+          },
+          "max_error_over_abs_dot": 3.58507e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.192464,
+            "min": 0.178176,
+            "max": 0.20256,
+            "runs": [
+              0.178176,
+              0.20256,
+              0.192464
+            ]
+          },
+          "tflops": {
+            "median": 11.1578,
+            "min": 10.6017,
+            "max": 12.0526,
+            "runs": [
+              12.0526,
+              10.6017,
+              11.1578
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.33009,
+            "min": 2.30303,
+            "max": 2.35053,
+            "runs": [
+              2.30303,
+              2.33009,
+              2.35053
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.58817e-05
+        }
+      ]
+    },
+    {
+      "shape": "2048^3",
+      "m": 2048,
+      "k": 2048,
+      "n": 2048,
+      "auto_picks": "double_buffered",
+      "split_k_splits": 1,
+      "tensor_core_splits": {
+        "bf16": 1,
+        "f16": 1,
+        "tf32": 1
+      },
+      "sm_clock_mhz_median": {
+        "median": 1252,
+        "min": 1125,
+        "max": 1402,
+        "runs": [
+          1402,
+          1252,
+          1125
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 3.2061,
+            "min": 2.86406,
+            "max": 3.55328,
+            "runs": [
+              2.86406,
+              3.2061,
+              3.55328
+            ]
+          },
+          "tflops": {
+            "median": 5.3585,
+            "min": 4.83493,
+            "max": 5.99842,
+            "runs": [
+              5.99842,
+              5.3585,
+              4.83493
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 93.2243,
+            "min": 93.2226,
+            "max": 93.2278,
+            "runs": [
+              93.2278,
+              93.2226,
+              93.2243
+            ]
+          },
+          "max_error_over_abs_dot": 1.53133e-07
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 2.9951,
+            "min": 2.67264,
+            "max": 3.29566,
+            "runs": [
+              2.67264,
+              2.9951,
+              3.29566
+            ]
+          },
+          "tflops": {
+            "median": 5.73598,
+            "min": 5.21287,
+            "max": 6.42805,
+            "runs": [
+              6.42805,
+              5.73598,
+              5.21287
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.07268,
+            "min": 1.07264,
+            "max": 1.0727,
+            "runs": [
+              1.07264,
+              1.0727,
+              1.07268
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 1.53133e-07
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 2.66189,
+            "min": 2.38131,
+            "max": 2.94138,
+            "runs": [
+              2.38131,
+              2.66189,
+              2.94138
+            ]
+          },
+          "tflops": {
+            "median": 6.45402,
+            "min": 5.84076,
+            "max": 7.21446,
+            "runs": [
+              7.21446,
+              6.45402,
+              5.84076
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.20052,
+            "min": 1.19985,
+            "max": 1.20112,
+            "runs": [
+              1.20052,
+              1.19985,
+              1.20112
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 74.1108,
+            "min": 74.0486,
+            "max": 74.1484,
+            "runs": [
+              74.1108,
+              74.0486,
+              74.1484
+            ]
+          },
+          "max_error_over_abs_dot": 2.75023e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 1.98291,
+            "min": 1.76781,
+            "max": 2.18573,
+            "runs": [
+              1.76781,
+              1.98291,
+              2.18573
+            ]
+          },
+          "tflops": {
+            "median": 8.66396,
+            "min": 7.86002,
+            "max": 9.71818,
+            "runs": [
+              9.71818,
+              8.66396,
+              7.86002
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.62006,
+            "min": 1.61601,
+            "max": 1.62012,
+            "runs": [
+              1.62012,
+              1.61601,
+              1.62006
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 2.75023e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 1.7121,
+            "min": 1.52626,
+            "max": 1.88864,
+            "runs": [
+              1.52626,
+              1.7121,
+              1.88864
+            ]
+          },
+          "tflops": {
+            "median": 10.0344,
+            "min": 9.09642,
+            "max": 11.2562,
+            "runs": [
+              11.2562,
+              10.0344,
+              9.09642
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.87726,
+            "min": 1.87299,
+            "max": 1.87827,
+            "runs": [
+              1.87827,
+              1.87299,
+              1.87726
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 67.0356,
+            "min": 65.7473,
+            "max": 67.0582,
+            "runs": [
+              67.0582,
+              67.0356,
+              65.7473
+            ]
+          },
+          "max_error_over_abs_dot": 0.000203476
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 1.15606,
+            "min": 1.03066,
+            "max": 1.23955,
+            "runs": [
+              1.03066,
+              1.15606,
+              1.23955
+            ]
+          },
+          "tflops": {
+            "median": 14.8607,
+            "min": 13.8597,
+            "max": 16.6689,
+            "runs": [
+              16.6689,
+              14.8607,
+              13.8597
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.79499,
+            "min": 2.79305,
+            "max": 2.85953,
+            "runs": [
+              2.79499,
+              2.79305,
+              2.85953
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.00020344
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 1.47405,
+            "min": 1.30458,
+            "max": 1.61587,
+            "runs": [
+              1.30458,
+              1.47405,
+              1.61587
+            ]
+          },
+          "tflops": {
+            "median": 11.6549,
+            "min": 10.6319,
+            "max": 13.1689,
+            "runs": [
+              13.1689,
+              11.6549,
+              10.6319
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.19263,
+            "min": 2.19136,
+            "max": 2.19764,
+            "runs": [
+              2.19263,
+              2.19136,
+              2.19764
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 79.7072,
+            "min": 79.5433,
+            "max": 79.8214,
+            "runs": [
+              79.7072,
+              79.8214,
+              79.5433
+            ]
+          },
+          "max_error_over_abs_dot": 2.79062e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 1.17197,
+            "min": 1.03782,
+            "max": 1.27939,
+            "runs": [
+              1.03782,
+              1.17197,
+              1.27939
+            ]
+          },
+          "tflops": {
+            "median": 14.659,
+            "min": 13.4282,
+            "max": 16.5537,
+            "runs": [
+              16.5537,
+              14.659,
+              13.4282
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.75251,
+            "min": 2.73638,
+            "max": 2.76351,
+            "runs": [
+              2.75251,
+              2.73638,
+              2.76351
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 2.79062e-05
+        }
+      ]
+    },
+    {
+      "shape": "4096^3",
+      "m": 4096,
+      "k": 4096,
+      "n": 4096,
+      "auto_picks": "double_buffered",
+      "split_k_splits": 1,
+      "tensor_core_splits": {
+        "bf16": 1,
+        "f16": 1,
+        "tf32": 1
+      },
+      "sm_clock_mhz_median": {
+        "median": 900,
+        "min": 900,
+        "max": 1207,
+        "runs": [
+          1207,
+          900,
+          900
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 34.0244,
+            "min": 26.8092,
+            "max": 34.0263,
+            "runs": [
+              26.8092,
+              34.0244,
+              34.0263
+            ]
+          },
+          "tflops": {
+            "median": 4.03942,
+            "min": 4.0392,
+            "max": 5.12655,
+            "runs": [
+              5.12655,
+              4.03942,
+              4.0392
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 91.8064,
+            "min": 88.3712,
+            "max": 91.8314,
+            "runs": [
+              88.3712,
+              91.8064,
+              91.8314
+            ]
+          },
+          "max_error_over_abs_dot": 1.74837e-07
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 31.231,
+            "min": 22.958,
+            "max": 31.24,
+            "runs": [
+              22.958,
+              31.231,
+              31.24
+            ]
+          },
+          "tflops": {
+            "median": 4.40073,
+            "min": 4.39945,
+            "max": 5.98653,
+            "runs": [
+              5.98653,
+              4.40073,
+              4.39945
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.08925,
+            "min": 1.08895,
+            "max": 1.13258,
+            "runs": [
+              1.13258,
+              1.08925,
+              1.08895
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 5.13413e-08
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 28.034,
+            "min": 20.2214,
+            "max": 28.036,
+            "runs": [
+              20.2214,
+              28.034,
+              28.036
+            ]
+          },
+          "tflops": {
+            "median": 4.90257,
+            "min": 4.90223,
+            "max": 6.79669,
+            "runs": [
+              6.79669,
+              4.90257,
+              4.90223
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.21405,
+            "min": 1.21338,
+            "max": 1.22035,
+            "runs": [
+              1.22035,
+              1.21338,
+              1.21405
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 75.9514,
+            "min": 75.9168,
+            "max": 76.8719,
+            "runs": [
+              76.8719,
+              75.9514,
+              75.9168
+            ]
+          },
+          "max_error_over_abs_dot": 2.0291e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 21.2818,
+            "min": 18.1749,
+            "max": 21.291,
+            "runs": [
+              18.1749,
+              21.291,
+              21.2818
+            ]
+          },
+          "tflops": {
+            "median": 6.45805,
+            "min": 6.45526,
+            "max": 7.56202,
+            "runs": [
+              7.56202,
+              6.45526,
+              6.45805
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.59828,
+            "min": 1.54561,
+            "max": 1.59866,
+            "runs": [
+              1.54561,
+              1.59828,
+              1.59866
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 2.0291e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 17.9917,
+            "min": 13.3115,
+            "max": 18.0019,
+            "runs": [
+              13.3115,
+              18.0019,
+              17.9917
+            ]
+          },
+          "tflops": {
+            "median": 7.63903,
+            "min": 7.63468,
+            "max": 10.3248,
+            "runs": [
+              10.3248,
+              7.63468,
+              7.63903
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.89114,
+            "min": 1.89091,
+            "max": 1.90819,
+            "runs": [
+              1.90819,
+              1.89114,
+              1.89091
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 62.5411,
+            "min": 62.2803,
+            "max": 65.4179,
+            "runs": [
+              65.4179,
+              62.5411,
+              62.2803
+            ]
+          },
+          "max_error_over_abs_dot": 0.000147574
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 11.2075,
+            "min": 8.55859,
+            "max": 11.2538,
+            "runs": [
+              8.55859,
+              11.2538,
+              11.2075
+            ]
+          },
+          "tflops": {
+            "median": 12.2631,
+            "min": 12.2127,
+            "max": 16.0586,
+            "runs": [
+              16.0586,
+              12.2127,
+              12.2631
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 3.02429,
+            "min": 2.87299,
+            "max": 3.03519,
+            "runs": [
+              2.87299,
+              3.02429,
+              3.03519
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000147654
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 15.2973,
+            "min": 11.5441,
+            "max": 15.3098,
+            "runs": [
+              11.5441,
+              15.2973,
+              15.3098
+            ]
+          },
+          "tflops": {
+            "median": 8.98452,
+            "min": 8.97717,
+            "max": 11.9056,
+            "runs": [
+              11.9056,
+              8.98452,
+              8.97717
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.22473,
+            "min": 2.22408,
+            "max": 2.23089,
+            "runs": [
+              2.23089,
+              2.22408,
+              2.22473
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 71.7486,
+            "min": 71.598,
+            "max": 74.3892,
+            "runs": [
+              74.3892,
+              71.7486,
+              71.598
+            ]
+          },
+          "max_error_over_abs_dot": 2.05946e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 10.9548,
+            "min": 8.60723,
+            "max": 10.9763,
+            "runs": [
+              8.60723,
+              10.9763,
+              10.9548
+            ]
+          },
+          "tflops": {
+            "median": 12.5461,
+            "min": 12.5215,
+            "max": 15.9678,
+            "runs": [
+              15.9678,
+              12.5215,
+              12.5461
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 3.09849,
+            "min": 3.02214,
+            "max": 3.1044,
+            "runs": [
+              3.02214,
+              3.09849,
+              3.1044
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 2.05946e-05
+        }
+      ]
+    },
+    {
+      "shape": "1000^3 (not a tile multiple)",
+      "m": 1000,
+      "k": 1000,
+      "n": 1000,
+      "auto_picks": "double_buffered",
+      "split_k_splits": 1,
+      "tensor_core_splits": {
+        "bf16": 1,
+        "f16": 1,
+        "tf32": 1
+      },
+      "sm_clock_mhz_median": {
+        "median": 1582,
+        "min": 1537,
+        "max": 1672,
+        "runs": [
+          1672,
+          1582,
+          1537
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.413696,
+            "min": 0.39424,
+            "max": 0.427008,
+            "runs": [
+              0.39424,
+              0.413696,
+              0.427008
+            ]
+          },
+          "tflops": {
+            "median": 4.83447,
+            "min": 4.68375,
+            "max": 5.07305,
+            "runs": [
+              5.07305,
+              4.83447,
+              4.68375
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 75.8917,
+            "min": 75.7831,
+            "max": 79.9505,
+            "runs": [
+              75.8917,
+              79.9505,
+              75.7831
+            ]
+          },
+          "max_error_over_abs_dot": 1.20435e-07
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.328592,
+            "min": 0.301056,
+            "max": 0.330656,
+            "runs": [
+              0.301056,
+              0.330656,
+              0.328592
+            ]
+          },
+          "tflops": {
+            "median": 6.08658,
+            "min": 6.04858,
+            "max": 6.64328,
+            "runs": [
+              6.64328,
+              6.04858,
+              6.08658
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.31767,
+            "min": 1.25077,
+            "max": 1.31955,
+            "runs": [
+              1.31767,
+              1.25077,
+              1.31955
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 5.27522e-08
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.369664,
+            "min": 0.353088,
+            "max": 0.381792,
+            "runs": [
+              0.353088,
+              0.369664,
+              0.381792
+            ]
+          },
+          "tflops": {
+            "median": 5.41032,
+            "min": 5.23845,
+            "max": 5.66431,
+            "runs": [
+              5.66431,
+              5.41032,
+              5.23845
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.11888,
+            "min": 1.11812,
+            "max": 1.11986,
+            "runs": [
+              1.11812,
+              1.11888,
+              1.11986
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 82.3529,
+            "min": 81.8019,
+            "max": 86.4416,
+            "runs": [
+              82.3529,
+              86.4416,
+              81.8019
+            ]
+          },
+          "max_error_over_abs_dot": 3.8246e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.315392,
+            "min": 0.291648,
+            "max": 0.319488,
+            "runs": [
+              0.291648,
+              0.319488,
+              0.315392
+            ]
+          },
+          "tflops": {
+            "median": 6.34132,
+            "min": 6.26002,
+            "max": 6.85758,
+            "runs": [
+              6.85758,
+              6.26002,
+              6.34132
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.35886,
+            "min": 1.2945,
+            "max": 1.36939,
+            "runs": [
+              1.35886,
+              1.2945,
+              1.36939
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.79745e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.236544,
+            "min": 0.226048,
+            "max": 0.243712,
+            "runs": [
+              0.226048,
+              0.236544,
+              0.243712
+            ]
+          },
+          "tflops": {
+            "median": 8.45509,
+            "min": 8.20641,
+            "max": 8.84768,
+            "runs": [
+              8.84768,
+              8.45509,
+              8.20641
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.75109,
+            "min": 1.74654,
+            "max": 1.75197,
+            "runs": [
+              1.74654,
+              1.75109,
+              1.75197
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 78.1973,
+            "min": 77.3211,
+            "max": 84.6154,
+            "runs": [
+              78.1973,
+              84.6154,
+              77.3211
+            ]
+          },
+          "max_error_over_abs_dot": 0.00033318
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.190384,
+            "min": 0.177152,
+            "max": 0.201568,
+            "runs": [
+              0.177152,
+              0.201568,
+              0.190384
+            ]
+          },
+          "tflops": {
+            "median": 10.5051,
+            "min": 9.92221,
+            "max": 11.2897,
+            "runs": [
+              11.2897,
+              9.92221,
+              10.5051
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.23147,
+            "min": 2.0685,
+            "max": 2.2663,
+            "runs": [
+              2.23147,
+              2.0685,
+              2.2663
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000333164
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.203776,
+            "min": 0.19456,
+            "max": 0.20992,
+            "runs": [
+              0.19456,
+              0.203776,
+              0.20992
+            ]
+          },
+          "tflops": {
+            "median": 9.8147,
+            "min": 9.52744,
+            "max": 10.2796,
+            "runs": [
+              10.2796,
+              9.8147,
+              9.52744
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.03306,
+            "min": 2.02591,
+            "max": 2.03398,
+            "runs": [
+              2.02591,
+              2.03306,
+              2.03398
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 90.668,
+            "min": 90.17,
+            "max": 98.2533,
+            "runs": [
+              90.668,
+              98.2533,
+              90.17
+            ]
+          },
+          "max_error_over_abs_dot": 3.81064e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.191488,
+            "min": 0.177856,
+            "max": 0.200704,
+            "runs": [
+              0.177856,
+              0.200704,
+              0.191488
+            ]
+          },
+          "tflops": {
+            "median": 10.4445,
+            "min": 9.96492,
+            "max": 11.2451,
+            "runs": [
+              11.2451,
+              9.96492,
+              10.4445
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.23121,
+            "min": 2.06731,
+            "max": 2.25024,
+            "runs": [
+              2.23121,
+              2.06731,
+              2.25024
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.79202e-05
+        }
+      ]
+    },
+    {
+      "shape": "1023x1029x1031 (odd)",
+      "m": 1023,
+      "k": 1029,
+      "n": 1031,
+      "auto_picks": "double_buffered",
+      "split_k_splits": 1,
+      "tensor_core_splits": {
+        "bf16": 1,
+        "f16": 1,
+        "tf32": 1
+      },
+      "sm_clock_mhz_median": {
+        "median": 1515,
+        "min": 1485,
+        "max": 1590,
+        "runs": [
+          1590,
+          1485,
+          1515
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.485376,
+            "min": 0.462848,
+            "max": 0.493568,
+            "runs": [
+              0.462848,
+              0.493568,
+              0.485376
+            ]
+          },
+          "tflops": {
+            "median": 4.472,
+            "min": 4.39777,
+            "max": 4.68966,
+            "runs": [
+              4.68966,
+              4.39777,
+              4.472
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 77.6893,
+            "min": 77.4423,
+            "max": 80.5107,
+            "runs": [
+              77.4423,
+              80.5107,
+              77.6893
+            ]
+          },
+          "max_error_over_abs_dot": 1.34644e-07
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.381952,
+            "min": 0.360208,
+            "max": 0.397312,
+            "runs": [
+              0.360208,
+              0.397312,
+              0.381952
+            ]
+          },
+          "tflops": {
+            "median": 5.68291,
+            "min": 5.46321,
+            "max": 6.02596,
+            "runs": [
+              6.02596,
+              5.46321,
+              5.68291
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.28718,
+            "min": 1.24207,
+            "max": 1.29128,
+            "runs": [
+              1.29128,
+              1.24207,
+              1.28718
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 5.89589e-08
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.47616,
+            "min": 0.455568,
+            "max": 0.485376,
+            "runs": [
+              0.455568,
+              0.485376,
+              0.47616
+            ]
+          },
+          "tflops": {
+            "median": 4.55855,
+            "min": 4.472,
+            "max": 4.7646,
+            "runs": [
+              4.7646,
+              4.472,
+              4.55855
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.01675,
+            "min": 1.01415,
+            "max": 1.01724,
+            "runs": [
+              1.01415,
+              1.01675,
+              1.01724
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 64.0426,
+            "min": 64,
+            "max": 64.073,
+            "runs": [
+              64,
+              64.073,
+              64.0426
+            ]
+          },
+          "max_error_over_abs_dot": 3.9616e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.303104,
+            "min": 0.290816,
+            "max": 0.309248,
+            "runs": [
+              0.290816,
+              0.309248,
+              0.303104
+            ]
+          },
+          "tflops": {
+            "median": 7.16124,
+            "min": 7.01896,
+            "max": 7.46382,
+            "runs": [
+              7.46382,
+              7.01896,
+              7.16124
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.58935,
+            "min": 1.58887,
+            "max": 1.59288,
+            "runs": [
+              1.58887,
+              1.58935,
+              1.59288
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.96254e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.31232,
+            "min": 0.299008,
+            "max": 0.319456,
+            "runs": [
+              0.299008,
+              0.319456,
+              0.31232
+            ]
+          },
+          "tflops": {
+            "median": 6.94992,
+            "min": 6.79467,
+            "max": 7.25934,
+            "runs": [
+              7.25934,
+              6.79467,
+              6.94992
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.5461,
+            "min": 1.54441,
+            "max": 1.54724,
+            "runs": [
+              1.5461,
+              1.54441,
+              1.54724
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 67.6768,
+            "min": 67.5223,
+            "max": 68.2463,
+            "runs": [
+              68.2463,
+              67.5223,
+              67.6768
+            ]
+          },
+          "max_error_over_abs_dot": 0.000283664
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.211968,
+            "min": 0.203776,
+            "max": 0.215824,
+            "runs": [
+              0.203776,
+              0.215824,
+              0.211968
+            ]
+          },
+          "tflops": {
+            "median": 10.2402,
+            "min": 10.0573,
+            "max": 10.6519,
+            "runs": [
+              10.6519,
+              10.0573,
+              10.2402
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.28437,
+            "min": 2.2715,
+            "max": 2.28463,
+            "runs": [
+              2.2715,
+              2.28437,
+              2.28463
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000283666
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.277408,
+            "min": 0.266112,
+            "max": 0.282624,
+            "runs": [
+              0.266112,
+              0.282624,
+              0.277408
+            ]
+          },
+          "tflops": {
+            "median": 7.82457,
+            "min": 7.68017,
+            "max": 8.15671,
+            "runs": [
+              8.15671,
+              7.68017,
+              7.82457
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.74188,
+            "min": 1.73983,
+            "max": 1.74447,
+            "runs": [
+              1.73983,
+              1.74188,
+              1.74447
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 85.007,
+            "min": 84.8962,
+            "max": 85.4249,
+            "runs": [
+              85.4249,
+              84.8962,
+              85.007
+            ]
+          },
+          "max_error_over_abs_dot": 3.96708e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.23552,
+            "min": 0.226304,
+            "max": 0.239616,
+            "runs": [
+              0.226304,
+              0.239616,
+              0.23552
+            ]
+          },
+          "tflops": {
+            "median": 9.2162,
+            "min": 9.05866,
+            "max": 9.59152,
+            "runs": [
+              9.59152,
+              9.05866,
+              9.2162
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 2.05059,
+            "min": 2.04167,
+            "max": 2.0515,
+            "runs": [
+              2.04167,
+              2.05059,
+              2.0515
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.96746e-05
+        }
+      ]
+    },
+    {
+      "shape": "256x1024x1024 (matmul_bias_relu)",
+      "m": 256,
+      "k": 1024,
+      "n": 1024,
+      "auto_picks": "split_k",
+      "split_k_splits": 3,
+      "tensor_core_splits": {
+        "bf16": 1,
+        "f16": 1,
+        "tf32": 3
+      },
+      "sm_clock_mhz_median": {
+        "median": 1507,
+        "min": 1485,
+        "max": 1657,
+        "runs": [
+          1657,
+          1507,
+          1485
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.11776,
+            "min": 0.108544,
+            "max": 0.120832,
+            "runs": [
+              0.108544,
+              0.11776,
+              0.120832
+            ]
+          },
+          "tflops": {
+            "median": 4.55903,
+            "min": 4.44312,
+            "max": 4.94611,
+            "runs": [
+              4.94611,
+              4.55903,
+              4.44312
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 108.27,
+            "min": 104.814,
+            "max": 114.453,
+            "runs": [
+              114.453,
+              108.27,
+              104.814
+            ]
+          },
+          "max_error_over_abs_dot": 5.5657e-08
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.125952,
+            "min": 0.121856,
+            "max": 0.126672,
+            "runs": [
+              0.121856,
+              0.125952,
+              0.126672
+            ]
+          },
+          "tflops": {
+            "median": 4.2625,
+            "min": 4.23828,
+            "max": 4.40578,
+            "runs": [
+              4.40578,
+              4.2625,
+              4.23828
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 0.923618,
+            "min": 0.873721,
+            "max": 0.954073,
+            "runs": [
+              0.873721,
+              0.923618,
+              0.954073
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 7.70778e-08
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.10824,
+            "min": 0.100128,
+            "max": 0.110352,
+            "runs": [
+              0.100128,
+              0.10824,
+              0.110352
+            ]
+          },
+          "tflops": {
+            "median": 4.96,
+            "min": 4.86508,
+            "max": 5.36185,
+            "runs": [
+              5.36185,
+              4.96,
+              4.86508
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.0932,
+            "min": 1.09287,
+            "max": 1.09376,
+            "runs": [
+              1.09376,
+              1.09287,
+              1.0932
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 92.377,
+            "min": 92.3077,
+            "max": 92.5086,
+            "runs": [
+              92.377,
+              92.3077,
+              92.5086
+            ]
+          },
+          "max_error_over_abs_dot": 3.84072e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.100288,
+            "min": 0.09216,
+            "max": 0.1024,
+            "runs": [
+              0.09216,
+              0.100288,
+              0.1024
+            ]
+          },
+          "tflops": {
+            "median": 5.35329,
+            "min": 5.24288,
+            "max": 5.82542,
+            "runs": [
+              5.82542,
+              5.35329,
+              5.24288
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.18457,
+            "min": 1.18163,
+            "max": 1.18485,
+            "runs": [
+              1.18485,
+              1.18457,
+              1.18163
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.83996e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.08704,
+            "min": 0.079872,
+            "max": 0.089088,
+            "runs": [
+              0.079872,
+              0.08704,
+              0.089088
+            ]
+          },
+          "tflops": {
+            "median": 6.16809,
+            "min": 6.0263,
+            "max": 6.72164,
+            "runs": [
+              6.72164,
+              6.16809,
+              6.0263
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.3618,
+            "min": 1.35955,
+            "max": 1.36493,
+            "runs": [
+              1.36493,
+              1.3618,
+              1.35955
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 82.2851,
+            "min": 82.1979,
+            "max": 95.7446,
+            "runs": [
+              82.2851,
+              95.7446,
+              82.1979
+            ]
+          },
+          "max_error_over_abs_dot": 0.000283366
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.075776,
+            "min": 0.069616,
+            "max": 0.079872,
+            "runs": [
+              0.069616,
+              0.079872,
+              0.075776
+            ]
+          },
+          "tflops": {
+            "median": 7.08497,
+            "min": 6.72164,
+            "max": 7.71189,
+            "runs": [
+              7.71189,
+              6.72164,
+              7.08497
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.64076,
+            "min": 1.38924,
+            "max": 1.66667,
+            "runs": [
+              1.66667,
+              1.38924,
+              1.64076
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000283339
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.075776,
+            "min": 0.069632,
+            "max": 0.077616,
+            "runs": [
+              0.069632,
+              0.075776,
+              0.077616
+            ]
+          },
+          "tflops": {
+            "median": 7.08497,
+            "min": 6.91701,
+            "max": 7.71012,
+            "runs": [
+              7.71012,
+              7.08497,
+              6.91701
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.57003,
+            "min": 1.56699,
+            "max": 1.57315,
+            "runs": [
+              1.57315,
+              1.57003,
+              1.56699
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 79.516,
+            "min": 79.4872,
+            "max": 80.0165,
+            "runs": [
+              80.0165,
+              79.4872,
+              79.516
+            ]
+          },
+          "max_error_over_abs_dot": 3.84063e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.060416,
+            "min": 0.056096,
+            "max": 0.06144,
+            "runs": [
+              0.056096,
+              0.060416,
+              0.06144
+            ]
+          },
+          "tflops": {
+            "median": 8.88624,
+            "min": 8.73813,
+            "max": 9.57057,
+            "runs": [
+              9.57057,
+              8.88624,
+              8.73813
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.96825,
+            "min": 1.96296,
+            "max": 1.97345,
+            "runs": [
+              1.96296,
+              1.97345,
+              1.96825
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.84063e-05
+        }
+      ]
+    },
+    {
+      "shape": "128x512x2048 (MLP layer 1, B=128)",
+      "m": 128,
+      "k": 512,
+      "n": 2048,
+      "auto_picks": "split_k",
+      "split_k_splits": 3,
+      "tensor_core_splits": {
+        "bf16": 1,
+        "f16": 1,
+        "tf32": 3
+      },
+      "sm_clock_mhz_median": {
+        "median": 1740,
+        "min": 1215,
+        "max": 1792,
+        "runs": [
+          1215,
+          1740,
+          1792
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.083968,
+            "min": 0.07208,
+            "max": 0.087008,
+            "runs": [
+              0.083968,
+              0.087008,
+              0.07208
+            ]
+          },
+          "tflops": {
+            "median": 3.19688,
+            "min": 3.08518,
+            "max": 3.72413,
+            "runs": [
+              3.19688,
+              3.08518,
+              3.72413
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 117.777,
+            "min": 107.946,
+            "max": 118.028,
+            "runs": [
+              117.777,
+              107.946,
+              118.028
+            ]
+          },
+          "max_error_over_abs_dot": 6.85331e-08
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.09216,
+            "min": 0.091136,
+            "max": 0.09728,
+            "runs": [
+              0.09728,
+              0.09216,
+              0.091136
+            ]
+          },
+          "tflops": {
+            "median": 2.91271,
+            "min": 2.75941,
+            "max": 2.94544,
+            "runs": [
+              2.75941,
+              2.91271,
+              2.94544
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 0.849062,
+            "min": 0.847255,
+            "max": 0.926393,
+            "runs": [
+              0.849062,
+              0.926393,
+              0.847255
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 8.26991e-08
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.0768,
+            "min": 0.066528,
+            "max": 0.079872,
+            "runs": [
+              0.0768,
+              0.079872,
+              0.066528
+            ]
+          },
+          "tflops": {
+            "median": 3.49525,
+            "min": 3.36082,
+            "max": 4.03492,
+            "runs": [
+              3.49525,
+              3.36082,
+              4.03492
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.09091,
+            "min": 1.08642,
+            "max": 1.11828,
+            "runs": [
+              1.11828,
+              1.09091,
+              1.08642
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 83.0189,
+            "min": 83.0189,
+            "max": 84.4742,
+            "runs": [
+              84.4742,
+              83.0189,
+              83.0189
+            ]
+          },
+          "max_error_over_abs_dot": 5.59097e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.064464,
+            "min": 0.0512,
+            "max": 0.06656,
+            "runs": [
+              0.064464,
+              0.06656,
+              0.0512
+            ]
+          },
+          "tflops": {
+            "median": 4.16411,
+            "min": 4.03298,
+            "max": 5.24288,
+            "runs": [
+              4.16411,
+              4.03298,
+              5.24288
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.31343,
+            "min": 1.30986,
+            "max": 1.33824,
+            "runs": [
+              1.33824,
+              1.31343,
+              1.30986
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 5.59097e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.059392,
+            "min": 0.04608,
+            "max": 0.062288,
+            "runs": [
+              0.059392,
+              0.062288,
+              0.04608
+            ]
+          },
+          "tflops": {
+            "median": 4.51972,
+            "min": 4.30959,
+            "max": 5.82542,
+            "runs": [
+              4.51972,
+              4.30959,
+              5.82542
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.42029,
+            "min": 1.41882,
+            "max": 1.4479,
+            "runs": [
+              1.4479,
+              1.41882,
+              1.42029
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 75.87,
+            "min": 75,
+            "max": 76.1387,
+            "runs": [
+              76.1387,
+              75,
+              75.87
+            ]
+          },
+          "max_error_over_abs_dot": 0.000370298
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.04392,
+            "min": 0.04096,
+            "max": 0.045056,
+            "runs": [
+              0.04392,
+              0.045056,
+              0.04096
+            ]
+          },
+          "tflops": {
+            "median": 6.11192,
+            "min": 5.95782,
+            "max": 6.5536,
+            "runs": [
+              6.11192,
+              5.95782,
+              6.5536
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.90367,
+            "min": 1.89392,
+            "max": 1.97884,
+            "runs": [
+              1.97884,
+              1.90367,
+              1.89392
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000370298
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.053248,
+            "min": 0.046592,
+            "max": 0.055296,
+            "runs": [
+              0.053248,
+              0.055296,
+              0.046592
+            ]
+          },
+          "tflops": {
+            "median": 5.04123,
+            "min": 4.85452,
+            "max": 5.76141,
+            "runs": [
+              5.04123,
+              4.85452,
+              5.76141
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.60377,
+            "min": 1.60188,
+            "max": 1.63765,
+            "runs": [
+              1.63765,
+              1.60377,
+              1.60188
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 84.1217,
+            "min": 83.7838,
+            "max": 84.8646,
+            "runs": [
+              84.1217,
+              83.7838,
+              84.8646
+            ]
+          },
+          "max_error_over_abs_dot": 5.62366e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.04608,
+            "min": 0.043008,
+            "max": 0.04696,
+            "runs": [
+              0.04608,
+              0.04696,
+              0.043008
+            ]
+          },
+          "tflops": {
+            "median": 5.82542,
+            "min": 5.71626,
+            "max": 6.24152,
+            "runs": [
+              5.82542,
+              5.71626,
+              6.24152
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.91489,
+            "min": 1.89796,
+            "max": 1.96552,
+            "runs": [
+              1.96552,
+              1.91489,
+              1.89796
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 5.62366e-05
+        }
+      ]
+    },
+    {
+      "shape": "128x2048x512 (MLP layer 2, B=128)",
+      "m": 128,
+      "k": 2048,
+      "n": 512,
+      "auto_picks": "split_k",
+      "split_k_splits": 7,
+      "tensor_core_splits": {
+        "bf16": 7,
+        "f16": 7,
+        "tf32": 7
+      },
+      "sm_clock_mhz_median": {
+        "median": 1725,
+        "min": 1162,
+        "max": 1942,
+        "runs": [
+          1942,
+          1725,
+          1162
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.072704,
+            "min": 0.059376,
+            "max": 0.078848,
+            "runs": [
+              0.059376,
+              0.072704,
+              0.078848
+            ]
+          },
+          "tflops": {
+            "median": 3.69217,
+            "min": 3.40447,
+            "max": 4.52094,
+            "runs": [
+              4.52094,
+              3.69217,
+              3.40447
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 149.612,
+            "min": 146.912,
+            "max": 149.967,
+            "runs": [
+              149.612,
+              146.912,
+              149.967
+            ]
+          },
+          "max_error_over_abs_dot": 3.50879e-08
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.104448,
+            "min": 0.100352,
+            "max": 0.112512,
+            "runs": [
+              0.100352,
+              0.104448,
+              0.112512
+            ]
+          },
+          "tflops": {
+            "median": 2.57004,
+            "min": 2.38584,
+            "max": 2.67494,
+            "runs": [
+              2.67494,
+              2.57004,
+              2.38584
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 0.668393,
+            "min": 0.666815,
+            "max": 0.68068,
+            "runs": [
+              0.668393,
+              0.68068,
+              0.666815
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.08864e-08
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.069632,
+            "min": 0.048128,
+            "max": 0.075776,
+            "runs": [
+              0.048128,
+              0.069632,
+              0.075776
+            ]
+          },
+          "tflops": {
+            "median": 3.85506,
+            "min": 3.54249,
+            "max": 5.57753,
+            "runs": [
+              5.57753,
+              3.85506,
+              3.54249
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.04328,
+            "min": 1.04167,
+            "max": 1.0625,
+            "runs": [
+              1.0625,
+              1.04167,
+              1.04328
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 91.1111,
+            "min": 90.9091,
+            "max": 91.1714,
+            "runs": [
+              91.1714,
+              90.9091,
+              91.1111
+            ]
+          },
+          "max_error_over_abs_dot": 2.39103e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.065536,
+            "min": 0.063152,
+            "max": 0.068496,
+            "runs": [
+              0.063152,
+              0.065536,
+              0.068496
+            ]
+          },
+          "tflops": {
+            "median": 4.096,
+            "min": 3.91899,
+            "max": 4.25063,
+            "runs": [
+              4.25063,
+              4.096,
+              3.91899
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.15,
+            "min": 1.15,
+            "max": 1.17868,
+            "runs": [
+              1.17868,
+              1.15,
+              1.15
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 2.38465e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.051136,
+            "min": 0.03584,
+            "max": 0.052224,
+            "runs": [
+              0.03584,
+              0.051136,
+              0.052224
+            ]
+          },
+          "tflops": {
+            "median": 5.24944,
+            "min": 5.14008,
+            "max": 7.48983,
+            "runs": [
+              7.48983,
+              5.24944,
+              5.14008
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.52637,
+            "min": 1.50943,
+            "max": 1.54348,
+            "runs": [
+              1.54348,
+              1.50943,
+              1.52637
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100.099,
+            "min": 100,
+            "max": 101.053,
+            "runs": [
+              101.053,
+              100.099,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000195072
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.050176,
+            "min": 0.036864,
+            "max": 0.052224,
+            "runs": [
+              0.036864,
+              0.050176,
+              0.052224
+            ]
+          },
+          "tflops": {
+            "median": 5.34988,
+            "min": 5.14008,
+            "max": 7.28178,
+            "runs": [
+              7.28178,
+              5.34988,
+              5.14008
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.52941,
+            "min": 1.50175,
+            "max": 1.53019,
+            "runs": [
+              1.53019,
+              1.50175,
+              1.52941
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000195071
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.04608,
+            "min": 0.03584,
+            "max": 0.048128,
+            "runs": [
+              0.03584,
+              0.04608,
+              0.048128
+            ]
+          },
+          "tflops": {
+            "median": 5.82542,
+            "min": 5.57753,
+            "max": 7.48983,
+            "runs": [
+              7.48983,
+              5.82542,
+              5.57753
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.66475,
+            "min": 1.62968,
+            "max": 1.6716,
+            "runs": [
+              1.6716,
+              1.62968,
+              1.66475
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 109.844,
+            "min": 109.722,
+            "max": 110.828,
+            "runs": [
+              109.722,
+              109.844,
+              110.828
+            ]
+          },
+          "max_error_over_abs_dot": 2.38676e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.0512,
+            "min": 0.035648,
+            "max": 0.053248,
+            "runs": [
+              0.035648,
+              0.0512,
+              0.053248
+            ]
+          },
+          "tflops": {
+            "median": 5.24288,
+            "min": 5.04123,
+            "max": 7.53017,
+            "runs": [
+              7.53017,
+              5.24288,
+              5.04123
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.5,
+            "min": 1.48888,
+            "max": 1.51109,
+            "runs": [
+              1.51109,
+              1.48888,
+              1.5
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 2.38666e-05
+        }
+      ]
+    },
+    {
+      "shape": "512x2048x512 (MLP layer 2, B=512)",
+      "m": 512,
+      "k": 2048,
+      "n": 512,
+      "auto_picks": "split_k",
+      "split_k_splits": 3,
+      "tensor_core_splits": {
+        "bf16": 1,
+        "f16": 1,
+        "tf32": 3
+      },
+      "sm_clock_mhz_median": {
+        "median": 1717,
+        "min": 1687,
+        "max": 1800,
+        "runs": [
+          1800,
+          1717,
+          1687
+        ]
+      },
+      "kernels": [
+        {
+          "kernel": "auto",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.191376,
+            "min": 0.183296,
+            "max": 0.193472,
+            "runs": [
+              0.183296,
+              0.191376,
+              0.193472
+            ]
+          },
+          "tflops": {
+            "median": 5.61064,
+            "min": 5.54986,
+            "max": 5.85797,
+            "runs": [
+              5.85797,
+              5.61064,
+              5.54986
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 89.9531,
+            "min": 89.8797,
+            "max": 91.0197,
+            "runs": [
+              89.9531,
+              89.8797,
+              91.0197
+            ]
+          },
+          "max_error_over_abs_dot": 6.02917e-08
+        },
+        {
+          "kernel": "cublas",
+          "format": "fp32",
+          "median_ms": {
+            "median": 0.17496,
+            "min": 0.165888,
+            "max": 0.186368,
+            "runs": [
+              0.165888,
+              0.17496,
+              0.186368
+            ]
+          },
+          "tflops": {
+            "median": 6.13707,
+            "min": 5.76141,
+            "max": 6.47269,
+            "runs": [
+              6.47269,
+              6.13707,
+              5.76141
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.11169,
+            "min": 1.09866,
+            "max": 1.1126,
+            "runs": [
+              1.11169,
+              1.1126,
+              1.09866
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.70992e-08
+        },
+        {
+          "kernel": "tensor_core_tf32",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.171008,
+            "min": 0.164544,
+            "max": 0.173056,
+            "runs": [
+              0.164544,
+              0.171008,
+              0.173056
+            ]
+          },
+          "tflops": {
+            "median": 6.2789,
+            "min": 6.20459,
+            "max": 6.52556,
+            "runs": [
+              6.52556,
+              6.2789,
+              6.20459
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.115,
+            "min": 1.11435,
+            "max": 1.1155,
+            "runs": [
+              1.11435,
+              1.115,
+              1.1155
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 78.8641,
+            "min": 78.481,
+            "max": 85,
+            "runs": [
+              78.481,
+              78.8641,
+              85
+            ]
+          },
+          "max_error_over_abs_dot": 3.08762e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "tf32",
+          "median_ms": {
+            "median": 0.136192,
+            "min": 0.130048,
+            "max": 0.150528,
+            "runs": [
+              0.130048,
+              0.136192,
+              0.150528
+            ]
+          },
+          "tflops": {
+            "median": 7.88403,
+            "min": 7.13317,
+            "max": 8.2565,
+            "runs": [
+              8.2565,
+              7.88403,
+              7.13317
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.41514,
+            "min": 1.35404,
+            "max": 1.41871,
+            "runs": [
+              1.41871,
+              1.41514,
+              1.35404
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.08877e-05
+        },
+        {
+          "kernel": "tensor_core_bf16",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.145408,
+            "min": 0.139136,
+            "max": 0.146432,
+            "runs": [
+              0.139136,
+              0.145408,
+              0.146432
+            ]
+          },
+          "tflops": {
+            "median": 7.38434,
+            "min": 7.3327,
+            "max": 7.71721,
+            "runs": [
+              7.71721,
+              7.38434,
+              7.3327
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.31728,
+            "min": 1.31655,
+            "max": 1.32095,
+            "runs": [
+              1.32095,
+              1.31728,
+              1.31655
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 66.8864,
+            "min": 66.6667,
+            "max": 66.9118,
+            "runs": [
+              66.9118,
+              66.8864,
+              66.6667
+            ]
+          },
+          "max_error_over_abs_dot": 0.000195057
+        },
+        {
+          "kernel": "cublas",
+          "format": "bf16",
+          "median_ms": {
+            "median": 0.09728,
+            "min": 0.093088,
+            "max": 0.09728,
+            "runs": [
+              0.093088,
+              0.09728,
+              0.09728
+            ]
+          },
+          "tflops": {
+            "median": 11.0376,
+            "min": 11.0376,
+            "max": 11.5347,
+            "runs": [
+              11.5347,
+              11.0376,
+              11.0376
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.97599,
+            "min": 1.96907,
+            "max": 1.97727,
+            "runs": [
+              1.97727,
+              1.96907,
+              1.97599
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 0.000195057
+        },
+        {
+          "kernel": "tensor_core_f16",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.124928,
+            "min": 0.119712,
+            "max": 0.125952,
+            "runs": [
+              0.119712,
+              0.124928,
+              0.125952
+            ]
+          },
+          "tflops": {
+            "median": 8.59489,
+            "min": 8.52501,
+            "max": 8.96937,
+            "runs": [
+              8.96937,
+              8.59489,
+              8.52501
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.53075,
+            "min": 1.53019,
+            "max": 1.53468,
+            "runs": [
+              1.53468,
+              1.53019,
+              1.53075
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 86.087,
+            "min": 85.8476,
+            "max": 93.566,
+            "runs": [
+              86.087,
+              85.8476,
+              93.566
+            ]
+          },
+          "max_error_over_abs_dot": 3.10531e-05
+        },
+        {
+          "kernel": "cublas",
+          "format": "f16",
+          "median_ms": {
+            "median": 0.108544,
+            "min": 0.104176,
+            "max": 0.123776,
+            "runs": [
+              0.104176,
+              0.108544,
+              0.123776
+            ]
+          },
+          "tflops": {
+            "median": 9.89223,
+            "min": 8.67488,
+            "max": 10.307,
+            "runs": [
+              10.307,
+              9.89223,
+              8.67488
+            ]
+          },
+          "speedup_over_fp32_default": {
+            "median": 1.77761,
+            "min": 1.63115,
+            "max": 1.78082,
+            "runs": [
+              1.77761,
+              1.78082,
+              1.63115
+            ]
+          },
+          "percent_of_cublas_same_format": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "max_error_over_abs_dot": 3.10185e-05
+        }
+      ]
+    }
+  ]
+}

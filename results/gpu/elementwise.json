@@ -1,10 +1,10 @@
 {
   "benchmark": "GELU chain on the GPU: one kernel per op (unfused) vs one fused kernel",
-  "method": "CUDA events around each enqueue of the whole graph on one stream; inputs already on the device; 10 warmup enqueues per variant and warm-up rounds until the GPU has been busy for warmup_seconds (it boosts only under sustained load), then interleaved rounds (rotating order); time = median over rounds; speedup = median over rounds of unfused/fused in the same round; bandwidth = bytes each kernel reads and writes / median time",
+  "method": "CUDA events around each enqueue of the whole graph on one stream; inputs already on the device; 10 warmup enqueues per variant and warm-up rounds until the GPU has been busy for warmup_seconds (it boosts only under sustained load), then interleaved rounds (shuffled order); time = median over rounds; speedup = median over rounds of unfused/fused in the same round; bandwidth = bytes each kernel reads and writes / median time",
   "warmup_seconds": 1,
   "seconds_per_config": 2,
   "environment": {
-    "commit": "3b6c819",
+    "commit": "bcf8b0a",
     "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
     "hardware_threads": 20,
     "os": "Ubuntu 24.04.4 LTS, kernel 6.6.114.1-microsoft-standard-WSL2",
@@ -29,12 +29,12 @@
     "sm_clock_mhz_during_run": {
       "min": 210,
       "median_of_run_medians": 1425,
-      "max": 2025
+      "max": 2017
     }
   },
   "runs": 3,
   "commits": [
-    "3b6c819"
+    "bcf8b0a"
   ],
   "results": [
     {
@@ -48,33 +48,33 @@
           "kernel_launches": 9,
           "bytes_moved": 344064,
           "median_ms": {
-            "median": 0.059392,
-            "min": 0.058368,
-            "max": 0.067056,
+            "median": 0.090112,
+            "min": 0.089088,
+            "max": 0.091136,
             "runs": [
-              0.058368,
-              0.067056,
-              0.059392
+              0.090112,
+              0.089088,
+              0.091136
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 5.7931,
-            "min": 5.13099,
-            "max": 5.89474,
+            "median": 3.81818,
+            "min": 3.77528,
+            "max": 3.86207,
             "runs": [
-              5.89474,
-              5.13099,
-              5.7931
+              3.81818,
+              3.86207,
+              3.77528
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 1.72389,
-            "min": 1.52686,
-            "max": 1.75414,
+            "median": 1.1362,
+            "min": 1.12344,
+            "max": 1.14926,
             "runs": [
-              1.75414,
-              1.52686,
-              1.72389
+              1.1362,
+              1.14926,
+              1.12344
             ]
           }
         },
@@ -84,43 +84,43 @@
           "kernel_launches": 1,
           "bytes_moved": 32768,
           "median_ms": {
-            "median": 0.008192,
-            "min": 0.008192,
-            "max": 0.008192,
+            "median": 0.010208,
+            "min": 0.010016,
+            "max": 0.011264,
             "runs": [
-              0.008192,
-              0.008192,
-              0.008192
+              0.010016,
+              0.011264,
+              0.010208
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 4,
-            "min": 4,
-            "max": 4,
+            "median": 3.21003,
+            "min": 2.90909,
+            "max": 3.27157,
             "runs": [
-              4,
-              4,
-              4
+              3.27157,
+              2.90909,
+              3.21003
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 1.19031,
-            "min": 1.19031,
-            "max": 1.19031,
+            "median": 0.95523,
+            "min": 0.865677,
+            "max": 0.973541,
             "runs": [
-              1.19031,
-              1.19031,
-              1.19031
+              0.973541,
+              0.865677,
+              0.95523
             ]
           },
           "speedup_paired": {
-            "median": 6.10172,
-            "min": 5.98437,
-            "max": 6.95729,
+            "median": 5.66667,
+            "min": 5.63675,
+            "max": 5.83633,
             "runs": [
-              6.10172,
-              6.95729,
-              5.98437
+              5.83633,
+              5.63675,
+              5.66667
             ]
           }
         }
@@ -137,33 +137,33 @@
           "kernel_launches": 9,
           "bytes_moved": 5505020.0,
           "median_ms": {
-            "median": 0.119808,
-            "min": 0.110592,
-            "max": 0.12288,
+            "median": 0.13824,
+            "min": 0.131072,
+            "max": 0.147456,
             "runs": [
-              0.119808,
-              0.12288,
-              0.110592
+              0.147456,
+              0.131072,
+              0.13824
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 45.9487,
-            "min": 44.8,
-            "max": 49.7778,
+            "median": 39.8222,
+            "min": 37.3333,
+            "max": 42,
             "runs": [
-              45.9487,
-              44.8,
-              49.7778
+              37.3333,
+              42,
+              39.8222
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 13.6733,
-            "min": 13.3314,
-            "max": 14.8127,
+            "median": 11.8502,
+            "min": 11.1095,
+            "max": 12.4982,
             "runs": [
-              13.6733,
-              13.3314,
-              14.8127
+              11.1095,
+              12.4982,
+              11.8502
             ]
           }
         },
@@ -174,42 +174,42 @@
           "bytes_moved": 524288,
           "median_ms": {
             "median": 0.017408,
-            "min": 0.01536,
+            "min": 0.016384,
             "max": 0.017408,
             "runs": [
               0.017408,
               0.017408,
-              0.01536
+              0.016384
             ]
           },
           "achieved_bandwidth_gbs": {
             "median": 30.1176,
             "min": 30.1176,
-            "max": 34.1333,
+            "max": 32,
             "runs": [
               30.1176,
               30.1176,
-              34.1333
+              32
             ]
           },
           "percent_of_peak_bandwidth": {
             "median": 8.9623,
             "min": 8.9623,
-            "max": 10.1573,
+            "max": 9.52245,
             "runs": [
               8.9623,
               8.9623,
-              10.1573
+              9.52245
             ]
           },
           "speedup_paired": {
-            "median": 7,
-            "min": 7,
-            "max": 7.125,
+            "median": 9.10526,
+            "min": 7.3125,
+            "max": 9.16667,
             "runs": [
-              7,
-              7.125,
-              7
+              9.10526,
+              7.3125,
+              9.16667
             ]
           }
         }
@@ -226,32 +226,32 @@
           "kernel_launches": 9,
           "bytes_moved": 88080400.0,
           "median_ms": {
-            "median": 0.369664,
-            "min": 0.36864,
+            "median": 0.36864,
+            "min": 0.33728,
             "max": 0.369664,
             "runs": [
+              0.33728,
               0.36864,
-              0.369664,
               0.369664
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 238.271,
+            "median": 238.933,
             "min": 238.271,
-            "max": 238.933,
+            "max": 261.149,
             "runs": [
+              261.149,
               238.933,
-              238.271,
               238.271
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 70.904,
+            "median": 71.101,
             "min": 70.904,
-            "max": 71.101,
+            "max": 77.7119,
             "runs": [
+              77.7119,
               71.101,
-              70.904,
               70.904
             ]
           }
@@ -262,43 +262,43 @@
           "kernel_launches": 1,
           "bytes_moved": 8388610.0,
           "median_ms": {
-            "median": 0.038752,
-            "min": 0.038752,
+            "median": 0.038912,
+            "min": 0.037888,
             "max": 0.038912,
             "runs": [
-              0.038752,
-              0.038752,
+              0.037888,
+              0.038912,
               0.038912
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 216.469,
+            "median": 215.579,
             "min": 215.579,
-            "max": 216.469,
+            "max": 221.405,
             "runs": [
-              216.469,
-              216.469,
+              221.405,
+              215.579,
               215.579
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 64.4161,
+            "median": 64.1512,
             "min": 64.1512,
-            "max": 64.4161,
+            "max": 65.8851,
             "runs": [
-              64.4161,
-              64.4161,
+              65.8851,
+              64.1512,
               64.1512
             ]
           },
           "speedup_paired": {
-            "median": 9.24242,
-            "min": 9.22123,
-            "max": 9.33202,
+            "median": 9.42105,
+            "min": 9.33333,
+            "max": 9.5,
             "runs": [
-              9.22123,
-              9.24242,
-              9.33202
+              9.42105,
+              9.33333,
+              9.5
             ]
           }
         }
@@ -315,33 +315,33 @@
           "kernel_launches": 9,
           "bytes_moved": 352322000.0,
           "median_ms": {
-            "median": 1.14477,
-            "min": 1.14453,
-            "max": 1.14483,
+            "median": 1.15264,
+            "min": 1.15074,
+            "max": 1.15494,
             "runs": [
-              1.14453,
-              1.14483,
-              1.14477
+              1.15264,
+              1.15074,
+              1.15494
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 307.767,
-            "min": 307.75,
-            "max": 307.831,
+            "median": 305.665,
+            "min": 305.055,
+            "max": 306.171,
             "runs": [
-              307.831,
-              307.75,
-              307.767
+              305.665,
+              306.171,
+              305.055
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 91.5842,
-            "min": 91.579,
-            "max": 91.6034,
+            "median": 90.9587,
+            "min": 90.7772,
+            "max": 91.1092,
             "runs": [
-              91.6034,
-              91.579,
-              91.5842
+              90.9587,
+              91.1092,
+              90.7772
             ]
           }
         },
@@ -351,43 +351,43 @@
           "kernel_launches": 1,
           "bytes_moved": 33554400.0,
           "median_ms": {
-            "median": 0.114688,
+            "median": 0.11456,
             "min": 0.113664,
             "max": 0.114688,
             "runs": [
-              0.114688,
+              0.11456,
               0.114688,
               0.113664
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 292.571,
+            "median": 292.898,
             "min": 292.571,
             "max": 295.207,
             "runs": [
-              292.571,
+              292.898,
               292.571,
               295.207
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 87.0624,
+            "median": 87.1597,
             "min": 87.0624,
             "max": 87.8467,
             "runs": [
-              87.0624,
+              87.1597,
               87.0624,
               87.8467
             ]
           },
           "speedup_paired": {
-            "median": 10.018,
-            "min": 9.99818,
-            "max": 10.1182,
+            "median": 10.0811,
+            "min": 10.0809,
+            "max": 10.149,
             "runs": [
-              9.99818,
-              10.018,
-              10.1182
+              10.0811,
+              10.0809,
+              10.149
             ]
           }
         }
@@ -404,33 +404,33 @@
           "kernel_launches": 9,
           "bytes_moved": 1409290000.0,
           "median_ms": {
-            "median": 4.49229,
-            "min": 4.48717,
-            "max": 4.49894,
+            "median": 4.52198,
+            "min": 4.50048,
+            "max": 4.52506,
             "runs": [
-              4.48717,
-              4.49894,
-              4.49229
+              4.52506,
+              4.50048,
+              4.52198
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 313.712,
-            "min": 313.248,
-            "max": 314.07,
+            "median": 311.652,
+            "min": 311.441,
+            "max": 313.141,
             "runs": [
-              314.07,
-              313.248,
-              313.712
+              311.441,
+              313.141,
+              311.652
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 93.3534,
-            "min": 93.2153,
-            "max": 93.46,
+            "median": 92.7404,
+            "min": 92.6774,
+            "max": 93.1835,
             "runs": [
-              93.46,
-              93.2153,
-              93.3534
+              92.6774,
+              93.1835,
+              92.7404
             ]
           }
         },
@@ -440,43 +440,43 @@
           "kernel_launches": 1,
           "bytes_moved": 134218000.0,
           "median_ms": {
-            "median": 0.434176,
-            "min": 0.433152,
-            "max": 0.434176,
+            "median": 0.4352,
+            "min": 0.434176,
+            "max": 0.4352,
             "runs": [
-              0.433152,
+              0.4352,
               0.434176,
-              0.434176
+              0.4352
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 309.132,
-            "min": 309.132,
-            "max": 309.863,
+            "median": 308.405,
+            "min": 308.405,
+            "max": 309.132,
             "runs": [
-              309.863,
+              308.405,
               309.132,
-              309.132
+              308.405
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 91.9905,
-            "min": 91.9905,
-            "max": 92.2079,
+            "median": 91.774,
+            "min": 91.774,
+            "max": 91.9905,
             "runs": [
-              92.2079,
+              91.774,
               91.9905,
-              91.9905
+              91.774
             ]
           },
           "speedup_paired": {
-            "median": 10.3566,
-            "min": 10.3565,
-            "max": 10.3791,
+            "median": 10.3746,
+            "min": 10.3599,
+            "max": 10.3859,
             "runs": [
-              10.3791,
-              10.3566,
-              10.3565
+              10.3746,
+              10.3599,
+              10.3859
             ]
           }
         }
@@ -493,33 +493,33 @@
           "kernel_launches": 9,
           "bytes_moved": 5637140000.0,
           "median_ms": {
-            "median": 17.963,
-            "min": 17.9464,
-            "max": 17.9661,
+            "median": 18.0027,
+            "min": 17.9825,
+            "max": 18.0122,
             "runs": [
-              17.9464,
-              17.963,
-              17.9661
+              18.0027,
+              17.9825,
+              18.0122
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 313.82,
-            "min": 313.766,
-            "max": 314.109,
+            "median": 313.127,
+            "min": 312.963,
+            "max": 313.48,
             "runs": [
-              314.109,
-              313.82,
-              313.766
+              313.127,
+              313.48,
+              312.963
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 93.3854,
-            "min": 93.3694,
-            "max": 93.4716,
+            "median": 93.1794,
+            "min": 93.1305,
+            "max": 93.2843,
             "runs": [
-              93.4716,
-              93.3854,
-              93.3694
+              93.1794,
+              93.2843,
+              93.1305
             ]
           }
         },
@@ -529,43 +529,43 @@
           "kernel_launches": 1,
           "bytes_moved": 536871000.0,
           "median_ms": {
-            "median": 1.71418,
-            "min": 1.71296,
-            "max": 1.7152,
+            "median": 1.72442,
+            "min": 1.71696,
+            "max": 1.73046,
             "runs": [
-              1.7152,
-              1.71418,
-              1.71296
+              1.73046,
+              1.71696,
+              1.72442
             ]
           },
           "achieved_bandwidth_gbs": {
-            "median": 313.195,
-            "min": 313.008,
-            "max": 313.417,
+            "median": 311.335,
+            "min": 310.247,
+            "max": 312.687,
             "runs": [
-              313.008,
-              313.195,
-              313.417
+              310.247,
+              312.687,
+              311.335
             ]
           },
           "percent_of_peak_bandwidth": {
-            "median": 93.1994,
-            "min": 93.1438,
-            "max": 93.2656,
+            "median": 92.646,
+            "min": 92.3222,
+            "max": 93.0483,
             "runs": [
-              93.1438,
-              93.1994,
-              93.2656
+              92.3222,
+              93.0483,
+              92.646
             ]
           },
           "speedup_paired": {
-            "median": 10.4897,
-            "min": 10.487,
-            "max": 10.4997,
+            "median": 10.4716,
+            "min": 10.4495,
+            "max": 10.5048,
             "runs": [
-              10.4997,
-              10.4897,
-              10.487
+              10.5048,
+              10.4716,
+              10.4495
             ]
           }
         }
