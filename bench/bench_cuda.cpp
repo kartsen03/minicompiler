@@ -3,13 +3,19 @@
 //   elementwise  the GELU chain from 16 KB to 256 MB, unfused (one kernel per
 //                op) against fused (one kernel), with achieved memory
 //                bandwidth as a percentage of the device's peak
-//   matmul       naive, shared-memory tiled and register-tiled kernels against
-//                cuBLAS, with GFLOP/s as a percentage of the device's peak
+//   matmul       every kernel of the matmul ladder against cuBLAS, with
+//                GFLOP/s as a percentage of the device's peak
+//   tensor_core  the TF32, BF16 and FP16 tensor-core kernels against cuBLAS
+//                with the same input format and against FP32
+//   profile      one launch of each kernel in an NVTX range, for Nsight
+//                Compute (nothing is timed)
 //
 // Every variant is compiled once, its inputs are uploaded once, and then the
-// variants are timed in interleaved rounds (one enqueue of each per round,
-// rotating order): each enqueue is bracketed by CUDA events on one stream.
-// Results go to results/gpu/<suite>.json with the device, clocks and commit.
+// variants are timed in interleaved rounds (one run of each per round,
+// rotating order) on one stream. Elementwise runs are bracketed by CUDA
+// events; matmul runs are timed by event nodes inside a CUDA graph, which
+// leaves out host-side launch overhead (see time_graphs). Results go to
+// results/gpu/<suite>.json with the device, clocks and commit.
 
 #include "harness.hpp"
 
@@ -635,6 +641,184 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 	return out ? 0 : 1;
 }
 
+// A tensor-core input format: our kernel for it, the cuBLAS compute type
+// that rounds FP32 inputs to it, its unit roundoff and its subnormal spacing
+// (0 where the exponent range is FP32's).
+struct TensorFormat {
+	const char* name;
+	cuda::MatmulKernel kernel;
+	cublasComputeType_t compute;
+	const char* compute_name;
+	double u;
+	double spacing;
+};
+
+const TensorFormat kTensorFormats[] = {
+	{"tf32", cuda::MatmulKernel::TensorCoreTf32, CUBLAS_COMPUTE_32F_FAST_TF32, "CUBLAS_COMPUTE_32F_FAST_TF32",
+	 std::ldexp(1.0, -11), 0.0},
+	{"bf16", cuda::MatmulKernel::TensorCoreBf16, CUBLAS_COMPUTE_32F_FAST_16BF, "CUBLAS_COMPUTE_32F_FAST_16BF",
+	 std::ldexp(1.0, -8), 0.0},
+	{"f16", cuda::MatmulKernel::TensorCoreF16, CUBLAS_COMPUTE_32F_FAST_16F, "CUBLAS_COMPUTE_32F_FAST_16F",
+	 std::ldexp(1.0, -11), std::ldexp(1.0, -24)},
+};
+
+// The tensor-core kernels against cuBLAS on the same FP32 matrices with the
+// same input format, and all of them against FP32: the backend's default
+// kernel and cuBLAS SGEMM. Formats whose kernel does not run on this GPU and
+// build are left out.
+int run_tensor_core(const std::string& out_path, double warmup_seconds, double seconds) {
+	const cuda::DeviceInfo device = must(cuda::query_device(0), "query_device");
+	CHECK_CUDA(cudaSetDevice(0));
+	const Stream stream;
+	const Cublas cublas(stream);
+	std::vector<double> clocks;
+
+	std::vector<const TensorFormat*> formats;
+	for (const TensorFormat& f : kTensorFormats) {
+		if (cuda::tensor_core_supported(f.kernel)) formats.push_back(&f);
+	}
+	const std::vector<MatmulShape> shapes = {
+		{1024, 1024, 1024, "1024^3"},
+		{2048, 2048, 2048, "2048^3"},
+		{4096, 4096, 4096, "4096^3"},
+		{1000, 1000, 1000, "1000^3 (not a tile multiple)"},
+		{1023, 1029, 1031, "1023x1029x1031 (odd)"},
+		{256, 1024, 1024, "256x1024x1024 (matmul_bias_relu)"},
+		{128, 512, 2048, "128x512x2048 (MLP layer 1, B=128)"},
+		{128, 2048, 512, "128x2048x512 (MLP layer 2, B=128)"},
+		{512, 2048, 512, "512x2048x512 (MLP layer 2, B=512)"},
+	};
+
+	bench::JsonWriter json;
+	json.begin_object();
+	json.field("benchmark", "Tensor-core matmul C[m,n] = A[m,k] B[k,n] on FP32 matrices (row-major): the TF32, BF16 "
+	                        "and FP16 kernels against cuBLAS with the same input format, and against FP32 (the "
+	                        "backend's default kernel and cuBLAS SGEMM)");
+	json.field("method", "GPU time of each variant's launches, from event-record nodes captured with them into a "
+	                     "CUDA graph and replayed on one stream, as in matmul.json; 3 warmup runs per variant and "
+	                     "warm-up rounds until the GPU has been busy for warmup_seconds, then interleaved rounds "
+	                     "(rotating order); time = median over rounds; TFLOP/s = 2mnk / time; ratios are medians over "
+	                     "rounds of per-round ratios. Each result is checked on 1000 sampled elements against a "
+	                     "float64 dot product: FP32 variants within gamma_k sum|ab| + u|exact|, the others within "
+	                     "(2u' + u'^2 + 2 gamma_k) sum|ab| + 2 u32 |exact| (+ 2k 2^-24 for FP16), u' = 2u allowing "
+	                     "truncated inputs; max_error_over_abs_dot is the largest |c - exact| / sum|ab| among the "
+	                     "samples. cuBLAS runs cublasSgemm in CUBLAS_DEFAULT_MATH (FP32) and cublasGemmEx on the FP32 "
+	                     "matrices with the compute type of each format, which rounds the inputs to it and "
+	                     "accumulates in FP32, as the kernels here do; NVIDIA_TF32_OVERRIDE is unset");
+	json.field("warmup_seconds", warmup_seconds).field("seconds_per_config", seconds);
+	bench::write_environment(json);
+	json.key("formats").begin_array();
+	for (const TensorFormat& f : kTensorFormats) {
+		json.begin_object();
+		json.field("format", f.name).field("kernel", cuda::matmul_kernel_name(f.kernel));
+		json.field("cublas_compute_type", f.compute_name).field("unit_roundoff", f.u);
+		json.field("runs_here", cuda::tensor_core_supported(f.kernel));
+		json.end_object();
+	}
+	json.end_array();
+	json.key("results").begin_array();
+	std::printf("%-34s %-17s %-5s %10s %9s %10s %10s %14s\n", "shape (m x k x n)", "kernel", "input", "median ms",
+	            "TFLOP/s", "vs FP32", "% cuBLAS", "max err/sum|ab|");
+	for (const MatmulShape& s : shapes) {
+		const MatmulOperands ops(s);
+		float* const da = ops.da;
+		float* const db = ops.db;
+		float* const dc = ops.dc;
+
+		// The splits the backend gives split_k and each tensor-core kernel (which
+		// can differ: an SM holds fewer of some), and a workspace for the most.
+		const cuda::MatmulKernel picks = cuda::resolve_matmul_kernel(cuda::MatmulKernel::Auto, s.m, s.n, s.k,
+		                                                              device.sm_count);
+		const int splits = cuda::matmul_splits(cuda::MatmulKernel::SplitK, s.m, s.n, s.k, device.sm_count);
+		std::map<std::string, int> tc_splits;
+		int most_splits = splits;
+		for (const TensorFormat* f : formats) {
+			tc_splits[f->name] = cuda::matmul_splits(f->kernel, s.m, s.n, s.k, device.sm_count);
+			most_splits = std::max(most_splits, tc_splits[f->name]);
+		}
+		const std::size_t workspace_bytes =
+		    cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, s.m, s.n, most_splits);
+		float* workspace = nullptr;
+		if (workspace_bytes > 0) CHECK_CUDA(cudaMalloc(&workspace, workspace_bytes));
+		std::vector<MatmulVariant> variants;
+		variants.push_back({"auto", [=](cudaStream_t st) {
+			                    CHECK_CUDA(cuda::launch_matmul(picks, da, db, dc, s.m, s.n, s.k, st, splits, workspace));
+		                    }, "fp32", fp32_bound(s.k), {}, {}});
+		variants.push_back({"cublas", [&cublas, da, db, dc, s](cudaStream_t) { cublas.sgemm(da, db, dc, s.m, s.n, s.k); },
+		                    "fp32", fp32_bound(s.k), {}, {}});
+		for (const TensorFormat* f : formats) {
+			const ErrorBound bound = tensor_core_bound(s.k, f->u, f->spacing);
+			const cuda::MatmulKernel kernel = f->kernel;
+			const int kernel_splits = tc_splits[f->name];
+			variants.push_back({cuda::matmul_kernel_name(kernel), [=](cudaStream_t st) {
+				                    CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, st, kernel_splits,
+				                                                   workspace));
+			                    }, f->name, bound, {}, {}});
+			const cublasComputeType_t compute = f->compute;
+			variants.push_back({"cublas", [&cublas, compute, da, db, dc, s](cudaStream_t) {
+				                    cublas.gemm_ex(compute, da, db, dc, s.m, s.n, s.k);
+			                    }, f->name, bound, {}, {}});
+		}
+
+		for (MatmulVariant& v : variants) {
+			v.error = run_and_check(v, stream, ops.a, ops.b, dc, s.m, s.n, s.k);
+			if (!v.error.within_bound) {
+				std::fprintf(stderr, "%s (%s inputs) gives wrong results for %s\n", v.name.c_str(), v.format.c_str(),
+				             s.label);
+				return 1;
+			}
+		}
+
+		const std::size_t first_clock = clocks.size();
+		time_graphs(variants, stream, warmup_seconds, seconds, clocks);
+		const double clock_now =
+		    median_of(std::vector<double>(clocks.begin() + static_cast<std::ptrdiff_t>(first_clock), clocks.end()));
+		const double flops = 2.0 * s.m * s.n * s.k;
+		const MatmulVariant& fp32_default = variants[0];
+		json.begin_object();
+		json.field("shape", s.label).field("m", s.m).field("k", s.k).field("n", s.n);
+		json.field("auto_picks", cuda::matmul_kernel_name(picks));
+		json.field("split_k_splits", splits);
+		json.key("tensor_core_splits").begin_object();
+		for (const auto& [format, n_splits] : tc_splits) json.field(format, n_splits);
+		json.end_object();
+		json.field("sm_clock_mhz_median", clock_now);
+		json.key("kernels").begin_array();
+		for (const MatmulVariant& v : variants) {
+			// cuBLAS with the same input format (the variant itself for cuBLAS).
+			const MatmulVariant* reference = &v;
+			for (const MatmulVariant& r : variants) {
+				if (r.name == "cublas" && r.format == v.format) reference = &r;
+			}
+			const bench::TimingStats t = bench::summarize(v.samples_ms, 3);
+			const double tflops = flops / (t.median_ms * 1e9);
+			const double over_fp32 = paired_median(fp32_default, v);
+			const double of_cublas = 100.0 * paired_median(*reference, v);
+			json.begin_object();
+			json.field("kernel", v.name).field("format", v.format);
+			json.timing("timing", t);
+			json.field("tflops", tflops).field("speedup_over_fp32_default", over_fp32);
+			json.field("percent_of_cublas_same_format", of_cublas);
+			json.field("max_error_over_abs_dot", v.error.max_over_abs_dot);
+			json.end_object();
+			std::printf("%-34s %-17s %-5s %10.3f %9.2f %9.2fx %9.1f%% %14.2e\n", s.label, v.name.c_str(),
+			            v.format.c_str(), t.median_ms, tflops, over_fp32, of_cublas, v.error.max_over_abs_dot);
+		}
+		json.end_array();
+		json.end_object();
+		if (workspace) CHECK_CUDA(cudaFree(workspace));
+	}
+	json.end_array();
+	bench::write_device(json, device, clocks);
+	json.end_object();
+
+	std::ofstream out(out_path, std::ios::binary);
+	out << json.str();
+	std::printf("%zu of %zu tensor-core formats run on %s; wrote %s\n", formats.size(), std::size(kTensorFormats),
+	            device.name.c_str(), out_path.c_str());
+	return out ? 0 : 1;
+}
+
 }
 
 // One launch of every kernel, each inside its own NVTX range named
@@ -698,6 +882,14 @@ int run_profile(const std::string& graph_dir, const std::string& only, bool list
 			});
 		}
 		profiled(label + ".cublas", [&] { cublas.sgemm(da, db, dc, s.m, s.n, s.k); });
+		for (const TensorFormat& f : kTensorFormats) {
+			if (!cuda::tensor_core_supported(f.kernel)) continue;
+			profiled(label + "." + cuda::matmul_kernel_name(f.kernel), [&] {
+				CHECK_CUDA(cuda::launch_matmul(f.kernel, da, db, dc, s.m, s.n, s.k, stream,
+				                               cuda::matmul_splits(f.kernel, s.m, s.n, s.k, device.sm_count), workspace));
+			});
+			profiled(label + ".cublas_" + f.name, [&] { cublas.gemm_ex(f.compute, da, db, dc, s.m, s.n, s.k); });
+		}
 		if (workspace) CHECK_CUDA(cudaFree(workspace));
 	}
 	if (!list) std::printf("profiled on %s (%d SMs)\n", device.name.c_str(), device.sm_count);
@@ -728,16 +920,25 @@ int main(int argc, char** argv) {
 		} else if (a == "--list") {
 			list = true;
 		} else {
-			std::cerr << "usage: bench_cuda [--suite elementwise|matmul] [--out FILE] [--graphs DIR] [--quick]\n"
+			std::cerr << "usage: bench_cuda [--suite elementwise|matmul|tensor_core] [--out FILE] [--graphs DIR] "
+			             "[--quick]\n"
 			             "       bench_cuda --suite profile [--list | --only LABEL] [--graphs DIR]\n";
 			return 1;
 		}
 	}
 	if (out_path.empty()) out_path = "results/gpu/" + suite + ".json";
-	// Before CUDA starts: keep every library on plain FP32 arithmetic.
-	setenv("NVIDIA_TF32_OVERRIDE", "0", 1);
+	// Before CUDA starts: keep every library on plain FP32 arithmetic, except
+	// in the suites that run cuBLAS's TF32 GEMM, which the override would turn
+	// back into FP32 without an error. (cublasSgemm in CUBLAS_DEFAULT_MATH
+	// never uses TF32 either way.)
+	if (suite == "tensor_core" || suite == "profile") {
+		unsetenv("NVIDIA_TF32_OVERRIDE");
+	} else {
+		setenv("NVIDIA_TF32_OVERRIDE", "0", 1);
+	}
 	if (suite == "elementwise") return run_elementwise(graph_dir, out_path, warmup_seconds, seconds);
 	if (suite == "matmul") return run_matmul(out_path, warmup_seconds, seconds);
+	if (suite == "tensor_core") return run_tensor_core(out_path, warmup_seconds, seconds);
 	if (suite == "profile") return run_profile(graph_dir, only, list);
 	std::cerr << "unknown suite '" << suite << "'\n";
 	return 1;
