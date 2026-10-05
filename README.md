@@ -17,7 +17,7 @@ flowchart LR
     plan --> cpu["Eigen CPU backend"]
     plan --> cuda["CUDA backend"]
     cuda --> gen["one generated kernel per fused group (NVRTC)"]
-    cuda --> mm["matmul kernels: naive, tiled, register-tiled"]
+    cuda --> mm["matmul kernels: FP32 ladder up to double-buffered and split-K; TF32/BF16/FP16 tensor cores"]
     passes -. "per-pass dump" .-> dot["Graphviz DOT / SVG"]
 ```
 
@@ -113,11 +113,31 @@ as exact bit patterns, and the kernel uses `float4` loads and stores when
 every input's layout allows it. NVRTC compiles the source straight to a cubin
 for the GPU's exact architecture, a process-wide cache keeps each kernel
 compiled once, and the launch is a grid-stride loop sized to one wave of
-resident blocks. Matmuls run hand-written kernels: naive (one thread per
-output), shared-memory tiled (32×32), and register-tiled, which comes in two
-sizes: 128×128 tiles with an 8×8 block of outputs per thread, or 64×64 tiles
-with 4×4 per thread when the 128×128 tiles would keep at most three quarters
-of the SMs busy. Device memory follows the same lifetime plan as on the CPU:
+resident blocks. Matmuls run hand-written kernels, written as a ladder in
+which each step is one optimization over the last, all of them kept and
+selectable through `CudaOptions::matmul`
+([`matmul_kernels.cu`](src/cuda/matmul_kernels.cu)):
+
+1. naive: one thread per output, operands read from global memory;
+2. tiled: 32×32 tiles of A and B staged in shared memory;
+3. register-tiled: 128×128 tiles with an 8×8 block of outputs per thread in
+   registers (or 64×64 with 4×4);
+4. vectorized: 128-bit loads from global and shared memory, a transposed A
+   tile, and a thread layout that keeps each warp's loads free of bank
+   conflicts;
+5. double-buffered: the next tile's loads are issued before the current
+   tile's multiply-adds, so they overlap, with one barrier per tile;
+6. split-K: when the output has too few tiles to fill the GPU, blocks take
+   slices of K and a second kernel adds their partial products in a fixed
+   order, so the result is deterministic.
+
+The default runs the double-buffered kernel, or split-K where the output
+cannot fill the GPU. Three more kernels use tensor cores
+([`matmul_tensor_core.cu`](src/cuda/matmul_tensor_core.cu)): they round the
+inputs to TF32, BF16 or FP16 as they stage them in shared memory and
+accumulate in FP32 with WMMA. They are opt-in because the result is no longer
+FP32-accurate, and the tests hold each format to its own error bound.
+Device memory follows the same lifetime plan as on the CPU:
 intermediates and outputs share reused buffers, inputs and constants get
 their own (constants are uploaded once, at compile time), and a run copies
 only the inputs in and the outputs out. `CudaExecutable::enqueue(stream)`
