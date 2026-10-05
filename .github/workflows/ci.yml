@@ -44,3 +44,46 @@ jobs:
           ${{ matrix.cxx }} --version | head -1
           cmake --version | head -1
           grep -m1 PRETTY_NAME /etc/os-release
+
+  cuda:
+    # GitHub's runners have no GPU. This builds the CUDA backend with NVIDIA's
+    # toolkit image and runs the tests against the toolkit's stub driver
+    # libraries: the GPU tests find no device and skip, everything else runs.
+    name: CUDA ${{ matrix.cuda }} build (no GPU)
+    runs-on: ubuntu-latest
+    container: nvidia/cuda:${{ matrix.cuda }}-devel-ubuntu24.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    strategy:
+      fail-fast: false
+      matrix:
+        cuda: ["12.6.3", "13.4.2"]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends cmake g++ libeigen3-dev libgtest-dev ninja-build
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES="75;86"
+
+      - name: Build
+        run: |
+          cmake --build build
+          test -x build/bench/bench_cuda  # only built with the CUDA backend
+
+      - name: Test
+        run: |
+          mkdir -p /tmp/stub-driver
+          ln -s /usr/local/cuda/lib64/stubs/libcuda.so /tmp/stub-driver/libcuda.so.1
+          ln -s /usr/local/cuda/lib64/stubs/libnvidia-ml.so /tmp/stub-driver/libnvidia-ml.so.1
+          LD_LIBRARY_PATH=/tmp/stub-driver:${LD_LIBRARY_PATH:-} ctest --test-dir build --output-on-failure
+
+      - name: Toolchain versions
+        if: always()
+        run: |
+          nvcc --version | tail -2
+          g++ --version | head -1
+          cmake --version | head -1
