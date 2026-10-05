@@ -22,11 +22,13 @@ enum class MatmulKernel {
 	RegisterTiled128,  // 128x128 tiles in shared memory, an 8x8 block of outputs per thread in registers
 	RegisterTiled64,   // 64x64 tiles, a 4x4 block of outputs per thread
 	Vectorized,        // RegisterTiled128 with 128-bit global and shared-memory loads and a transposed A tile
+	DoubleBuffered,    // Vectorized, loading the next tile while computing the current one
 };
 
 const char* matmul_kernel_name(MatmulKernel kernel);
 
-// "naive", "tiled", "register_tiled", "register_tiled_128", "register_tiled_64" or "vectorized".
+// "naive", "tiled", "register_tiled", "register_tiled_128", "register_tiled_64", "vectorized" or
+// "double_buffered".
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name);
 
 // The kernel that computes an m x n output on a GPU with `sm_count` SMs.

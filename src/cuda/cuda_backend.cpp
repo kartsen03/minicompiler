@@ -20,17 +20,20 @@ const char* matmul_kernel_name(MatmulKernel kernel) {
 		case MatmulKernel::RegisterTiled128: return "register_tiled_128";
 		case MatmulKernel::RegisterTiled64: return "register_tiled_64";
 		case MatmulKernel::Vectorized: return "vectorized";
+		case MatmulKernel::DoubleBuffered: return "double_buffered";
 	}
 	return "?";
 }
 
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name) {
 	for (MatmulKernel k : {MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::RegisterTiled,
-	                       MatmulKernel::RegisterTiled128, MatmulKernel::RegisterTiled64, MatmulKernel::Vectorized}) {
+	                       MatmulKernel::RegisterTiled128, MatmulKernel::RegisterTiled64, MatmulKernel::Vectorized,
+	                       MatmulKernel::DoubleBuffered}) {
 		if (name == matmul_kernel_name(k)) return k;
 	}
 	return Error{"unknown matmul kernel '" + name +
-	             "' (naive, tiled, register_tiled, register_tiled_128, register_tiled_64, vectorized)"};
+	             "' (naive, tiled, register_tiled, register_tiled_128, register_tiled_64, vectorized, "
+	             "double_buffered)"};
 }
 
 MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int sm_count) {

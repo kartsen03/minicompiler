@@ -245,27 +245,50 @@ __device__ __forceinline__ void store_c(float* __restrict__ c, const float (&acc
 	}
 }
 
-template <int BK, bool kVec>
+// kDoubleBuffer: the next tile's global loads are issued before the current
+// tile's math and written to a second shared-memory buffer after it, so their
+// latency hides behind the FMAs instead of stalling every tile, and one barrier
+// per tile is enough instead of two.
+template <int BK, bool kVec, bool kDoubleBuffer>
 __global__ void __launch_bounds__(kVecThreads, 2)
 matmul_vectorized(const float* __restrict__ a, const float* __restrict__ b, float* __restrict__ c, int m, int n,
                   int k) {
-	__shared__ __align__(16) float as[BK][kVecBM + kAPad];
-	__shared__ __align__(16) float bs[BK][kVecBN];
+	constexpr int kStages = kDoubleBuffer ? 2 : 1;
+	__shared__ __align__(16) float as[kStages][BK][kVecBM + kAPad];
+	__shared__ __align__(16) float bs[kStages][BK][kVecBN];
 	const int warp = threadIdx.x / 32, lane = threadIdx.x % 32;
 	const int warp_row = (warp / 4) * 64, warp_col = (warp % 4) * 32;  // the warp's 64x32 region
 	const int ty = lane / 4, tx = lane % 4;
 	const int block_row = blockIdx.y * kVecBM, block_col = blockIdx.x * kVecBN;
+	const int a_col = warp_row + ty * 4, b_col = warp_col + tx * 4;
 
 	float acc[8][8] = {};
 	float4 ra[BK / 8], rb[BK / 8];
-	for (int k0=0; k0<k; k0+=BK) {
-		load_tiles<BK, kVec>(a, b, m, n, k, block_row, block_col, k0, ra, rb);
-		store_tiles<BK>(as, bs, ra, rb);
+	if constexpr (kDoubleBuffer) {
+		const int tiles = (k + BK - 1) / BK;
+		load_tiles<BK, kVec>(a, b, m, n, k, block_row, block_col, 0, ra, rb);
+		store_tiles<BK>(as[0], bs[0], ra, rb);
 		__syncthreads();
-		compute_tile<BK>(as, bs, acc, warp_row + ty * 4, warp_col + tx * 4);
-		__syncthreads();
+		for (int t=0; t<tiles; ++t) {
+			const int cur = t & 1;
+			const bool more = t + 1 < tiles;
+			if (more) load_tiles<BK, kVec>(a, b, m, n, k, block_row, block_col, (t + 1) * BK, ra, rb);
+			compute_tile<BK>(as[cur], bs[cur], acc, a_col, b_col);
+			// The other buffer was last read in the previous iteration, before its
+			// closing barrier, so it is free to overwrite.
+			if (more) store_tiles<BK>(as[cur ^ 1], bs[cur ^ 1], ra, rb);
+			__syncthreads();
+		}
+	} else {
+		for (int k0=0; k0<k; k0+=BK) {
+			load_tiles<BK, kVec>(a, b, m, n, k, block_row, block_col, k0, ra, rb);
+			store_tiles<BK>(as[0], bs[0], ra, rb);
+			__syncthreads();
+			compute_tile<BK>(as[0], bs[0], acc, a_col, b_col);
+			__syncthreads();
+		}
 	}
-	store_c<kVec>(c, acc, m, n, block_row + warp_row + ty * 4, block_col + warp_col + tx * 4);
+	store_c<kVec>(c, acc, m, n, block_row + a_col, block_col + b_col);
 }
 
 // float4 access needs every row of A, B and C to start 16-byte aligned.
@@ -274,12 +297,13 @@ bool rows_aligned(const float* a, const float* b, const float* c, int n, int k) 
 	return n % 4 == 0 && k % 4 == 0 && aligned(a) && aligned(b) && aligned(c);
 }
 
+template <int BK, bool kDoubleBuffer>
 cudaError_t launch_vectorized(const float* a, const float* b, float* c, int m, int n, int k, cudaStream_t stream) {
 	const dim3 grid((n + kVecBN - 1) / kVecBN, (m + kVecBM - 1) / kVecBM);
 	if (rows_aligned(a, b, c, n, k)) {
-		matmul_vectorized<8, true><<<grid, kVecThreads, 0, stream>>>(a, b, c, m, n, k);
+		matmul_vectorized<BK, true, kDoubleBuffer><<<grid, kVecThreads, 0, stream>>>(a, b, c, m, n, k);
 	} else {
-		matmul_vectorized<8, false><<<grid, kVecThreads, 0, stream>>>(a, b, c, m, n, k);
+		matmul_vectorized<BK, false, kDoubleBuffer><<<grid, kVecThreads, 0, stream>>>(a, b, c, m, n, k);
 	}
 	return cudaGetLastError();
 }
@@ -308,7 +332,8 @@ cudaError_t launch_matmul(MatmulKernel kernel, const float* a, const float* b, f
 		// thread, so 4 blocks (32 warps) fit on an SM to hide memory latency, and
 		// a small output still splits into enough blocks to occupy every SM.
 		case MatmulKernel::RegisterTiled64: return launch_register_tiled<64, 64, 8, 4, 4>(a, b, c, m, n, k, stream);
-		case MatmulKernel::Vectorized: return launch_vectorized(a, b, c, m, n, k, stream);
+		case MatmulKernel::Vectorized: return launch_vectorized<8, false>(a, b, c, m, n, k, stream);
+		case MatmulKernel::DoubleBuffered: return launch_vectorized<8, true>(a, b, c, m, n, k, stream);
 		case MatmulKernel::RegisterTiled: break;  // must be resolved to a tile size first
 	}
 	return cudaErrorInvalidValue;

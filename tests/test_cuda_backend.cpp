@@ -127,7 +127,8 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 	const double u = std::ldexp(1.0, -24);
 	for (const cuda::MatmulKernel kernel :
 	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
-	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized}) {
+	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized,
+	      cuda::MatmulKernel::DoubleBuffered}) {
 		cuda::CudaOptions options;
 		options.matmul = kernel;
 		for (const auto& [m, k, n] : shapes) {
@@ -160,7 +161,8 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 TEST(CudaBackend, MatmulKernelNamesRoundTrip) {
 	for (const cuda::MatmulKernel kernel :
 	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
-	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized}) {
+	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized,
+	      cuda::MatmulKernel::DoubleBuffered}) {
 		Result<cuda::MatmulKernel> parsed = cuda::matmul_kernel_from_name(cuda::matmul_kernel_name(kernel));
 		ASSERT_TRUE(parsed.ok());
 		EXPECT_EQ(parsed.value(), kernel);

@@ -375,7 +375,7 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 		std::vector<MatmulVariant> variants;
 		for (cuda::MatmulKernel kernel : {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
 		                                  cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64,
-		                                  cuda::MatmulKernel::Vectorized}) {
+		                                  cuda::MatmulKernel::Vectorized, cuda::MatmulKernel::DoubleBuffered}) {
 			variants.push_back({cuda::matmul_kernel_name(kernel), [=](cudaStream_t st) {
 				                    CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, st));
 			                    }, {}});
@@ -550,7 +550,7 @@ int run_profile(const std::string& graph_dir, const std::string& only, bool list
 		CHECK_CUDA(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice));
 		for (cuda::MatmulKernel kernel : {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
 		                                  cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64,
-		                                  cuda::MatmulKernel::Vectorized}) {
+		                                  cuda::MatmulKernel::Vectorized, cuda::MatmulKernel::DoubleBuffered}) {
 			profiled(label + "." + cuda::matmul_kernel_name(kernel),
 			         [&] { CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, stream)); });
 		}
