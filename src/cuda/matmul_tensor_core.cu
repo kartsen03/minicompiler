@@ -83,9 +83,10 @@ constexpr int kArch = 0;
 // once there rather than at every fragment load, and double-buffered as in
 // the SIMT kernel: the next tile's float4 global loads are issued before the
 // current tile's mma and stored after them. Rows are padded by 16 bytes, the
-// usual remedy for bank conflicts in fragment loads. Accumulators leave
-// through a per-warp 16x16 scratch tile, so edge tiles store with bounds
-// checks and C needs no alignment. Split-K as in the SIMT kernel: block z of
+// usual remedy for bank conflicts in fragment loads. Whole accumulator tiles
+// are stored straight to C when its rows are 32-byte aligned; edge tiles, or
+// all of them otherwise, leave through a per-warp 16x16 scratch tile with
+// bounds checks, so C needs no alignment. Split-K as in the SIMT kernel: block z of
 // the grid's depth covers K from z * k_split, and with a depth above 1 writes
 // its partial product to slice z of `partial`. The kernel has a body only in
 // device code for an architecture with P's format.
@@ -182,16 +183,26 @@ matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, flo
 
 		// Chosen after the loop, so the pointer does not hold registers during it.
 		float* __restrict__ out = gridDim.z == 1 ? c : partial + static_cast<std::ptrdiff_t>(blockIdx.z) * m * n;
+		// A whole 16x16 tile goes straight to global memory when every row of
+		// the output starts 32-byte aligned, as store_matrix_sync needs; edge
+		// tiles go through the scratch tile.
+		const bool direct = n % 8 == 0 && reinterpret_cast<std::uintptr_t>(out) % 32 == 0;
 		float (&sc)[16][16] = scratch[warp];
 		const int r = lane / 2, c0 = (lane % 2) * 8;  // each lane copies 8 consecutive floats of a row
 #pragma unroll
 		for (int i=0; i<4; ++i) {
 #pragma unroll
 			for (int j=0; j<2; ++j) {
+				const int tile_row = block_row + warp_row + i * 16, tile_col = block_col + warp_col + j * 16;
+				if (direct && tile_row + 16 <= m && tile_col + 16 <= n) {
+					wmma::store_matrix_sync(out + static_cast<std::ptrdiff_t>(tile_row) * n + tile_col, acc[i][j], n,
+					                        wmma::mem_row_major);
+					continue;
+				}
 				wmma::store_matrix_sync(&sc[0][0], acc[i][j], 16, wmma::mem_row_major);
 				__syncwarp();
-				const int gr = block_row + warp_row + i * 16 + r;
-				const int gc = block_col + warp_col + j * 16 + c0;
+				const int gr = tile_row + r;
+				const int gc = tile_col + c0;
 				if (gr < m) {
 					float* dst = out + static_cast<std::ptrdiff_t>(gr) * n + gc;
 #pragma unroll
