@@ -1,4 +1,7 @@
-# minicompiler
+# Contributing to minicompiler
+
+The conventions the code follows. Build and test instructions are in the
+[README](README.md#quick-start).
 
 ## Language & Build
 - Language: C++17
@@ -39,3 +42,10 @@ Google Benchmark, so warmup, repetition count and the reported statistic
 ## Error Handling
 - No exceptions for control flow
 - Use `std::optional` or `std::expected`-like return types for fallible operations
+
+## Benchmarks and Results
+- Every number in the README is generated from `results/*.json` by
+  `scripts/results_tables.py`; record results with `scripts/run_cpu_benchmarks.sh`
+  or `scripts/run_gpu_benchmarks.sh`, never by hand
+- Each result file records the commit (with `-dirty` when code was uncommitted),
+  the machine and the software versions
