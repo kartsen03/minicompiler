@@ -3,6 +3,11 @@
 # time, pinned by version and SHA-256, so a plain checkout builds anywhere.
 
 include(FetchContent)
+# Downloaded archives get the extraction time as their timestamps, so a changed
+# URL always rebuilds (CMake 3.24+ warns until a choice is made).
+if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+endif()
 
 # --- Eigen (header-only) ----------------------------------------------------
 find_package(Eigen3 3.3 QUIET NO_MODULE)
