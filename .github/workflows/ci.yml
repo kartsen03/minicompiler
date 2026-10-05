@@ -66,6 +66,16 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends cmake g++ libeigen3-dev libgtest-dev ninja-build
 
+      - name: Stub driver libraries
+        # The container has no driver. With the toolkit's stubs the programs
+        # load (test discovery runs the test binary during the build), and
+        # every CUDA call reports that no device is present.
+        run: |
+          mkdir -p /tmp/stub-driver
+          ln -s /usr/local/cuda/lib64/stubs/libcuda.so /tmp/stub-driver/libcuda.so.1
+          ln -s /usr/local/cuda/lib64/stubs/libnvidia-ml.so /tmp/stub-driver/libnvidia-ml.so.1
+          echo "LD_LIBRARY_PATH=/tmp/stub-driver:${LD_LIBRARY_PATH:-}" >> "$GITHUB_ENV"
+
       - name: Configure
         run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_CUDA_ARCHITECTURES="75;86"
 
@@ -75,11 +85,7 @@ jobs:
           test -x build/bench/bench_cuda  # only built with the CUDA backend
 
       - name: Test
-        run: |
-          mkdir -p /tmp/stub-driver
-          ln -s /usr/local/cuda/lib64/stubs/libcuda.so /tmp/stub-driver/libcuda.so.1
-          ln -s /usr/local/cuda/lib64/stubs/libnvidia-ml.so /tmp/stub-driver/libnvidia-ml.so.1
-          LD_LIBRARY_PATH=/tmp/stub-driver:${LD_LIBRARY_PATH:-} ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure
 
       - name: Toolchain versions
         if: always()
