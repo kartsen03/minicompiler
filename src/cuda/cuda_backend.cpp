@@ -7,6 +7,7 @@
 #include "minicompiler/runtime/memory_plan.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <utility>
 
 namespace minicompiler::cuda {
@@ -16,15 +17,25 @@ const char* matmul_kernel_name(MatmulKernel kernel) {
 		case MatmulKernel::Naive: return "naive";
 		case MatmulKernel::Tiled: return "tiled";
 		case MatmulKernel::RegisterTiled: return "register_tiled";
+		case MatmulKernel::RegisterTiled128: return "register_tiled_128";
+		case MatmulKernel::RegisterTiled64: return "register_tiled_64";
 	}
 	return "?";
 }
 
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name) {
-	for (MatmulKernel k : {MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::RegisterTiled}) {
+	for (MatmulKernel k : {MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::RegisterTiled,
+	                       MatmulKernel::RegisterTiled128, MatmulKernel::RegisterTiled64}) {
 		if (name == matmul_kernel_name(k)) return k;
 	}
-	return Error{"unknown matmul kernel '" + name + "' (naive, tiled, register_tiled)"};
+	return Error{"unknown matmul kernel '" + name +
+	             "' (naive, tiled, register_tiled, register_tiled_128, register_tiled_64)"};
+}
+
+MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int sm_count) {
+	if (kernel != MatmulKernel::RegisterTiled) return kernel;
+	const std::int64_t tiles = ((static_cast<std::int64_t>(m) + 127) / 128) * ((static_cast<std::int64_t>(n) + 127) / 128);
+	return tiles < sm_count ? MatmulKernel::RegisterTiled64 : MatmulKernel::RegisterTiled128;
 }
 
 namespace {
@@ -65,7 +76,8 @@ struct Launch {
 	unsigned count = 0;                 // elements, or groups of 4 when vectorized
 	std::vector<CUdeviceptr> pointers;  // out first, then the inputs
 	std::vector<void*> params;          // addresses of the kernel arguments, for cuLaunchKernel
-	// MatMul: C[m,n] = A[m,k] B[k,n].
+	// MatMul: C[m,n] = A[m,k] B[k,n], with the kernel chosen for this shape.
+	MatmulKernel matmul = MatmulKernel::RegisterTiled128;
 	const float* a = nullptr;
 	const float* b = nullptr;
 	float* c = nullptr;
@@ -140,8 +152,8 @@ public:
 		const cudaStream_t s = stream ? static_cast<cudaStream_t>(stream) : stream_;
 		for (Launch& launch : launches_) {
 			if (launch.is_matmul) {
-				MC_CUDA_RETURN(launch_matmul(options_.matmul, launch.a, launch.b, launch.c, launch.m, launch.n,
-				                             launch.k, s));
+				MC_CUDA_RETURN(launch_matmul(launch.matmul, launch.a, launch.b, launch.c, launch.m, launch.n, launch.k,
+				                             s));
 			} else {
 				MC_CU_RETURN(cuLaunchKernel(launch.function, launch.grid, 1, 1, kBlockSize, 1, 1, 0, s,
 				                            launch.params.data(), nullptr));
@@ -169,6 +181,13 @@ public:
 
 	std::size_t kernel_launches() const override { return launches_.size(); }
 	std::vector<std::string> kernel_sources() const override { return sources_; }
+	std::vector<MatmulKernel> matmul_kernels() const override {
+		std::vector<MatmulKernel> kernels;
+		for (const Launch& launch : launches_) {
+			if (launch.is_matmul) kernels.push_back(launch.matmul);
+		}
+		return kernels;
+	}
 	double jit_compile_ms() const override { return jit_ms_; }
 
 private:
@@ -233,6 +252,7 @@ private:
 			launch.m = static_cast<int>(a[0]);
 			launch.k = static_cast<int>(a[1]);
 			launch.n = static_cast<int>(node.type.shape[1]);
+			launch.matmul = resolve_matmul_kernel(options_.matmul, launch.m, launch.n, device_.sm_count);
 			launches_.push_back(std::move(launch));
 			return Status();
 		}

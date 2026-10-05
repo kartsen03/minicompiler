@@ -16,15 +16,23 @@
 namespace minicompiler::cuda {
 
 enum class MatmulKernel {
-	Naive,          // one thread per output element, operands read from global memory
-	Tiled,          // 32x32 tiles of A and B staged in shared memory, one output per thread
-	RegisterTiled,  // 128x128 tiles in shared memory, an 8x8 block of outputs per thread in registers
+	Naive,             // one thread per output element, operands read from global memory
+	Tiled,             // 32x32 tiles of A and B staged in shared memory, one output per thread
+	RegisterTiled,     // RegisterTiled128 or RegisterTiled64, whichever suits the shape (see below)
+	RegisterTiled128,  // 128x128 tiles in shared memory, an 8x8 block of outputs per thread in registers
+	RegisterTiled64,   // 64x64 tiles, a 4x4 block of outputs per thread
 };
 
 const char* matmul_kernel_name(MatmulKernel kernel);
 
-// "naive", "tiled" or "register_tiled".
+// "naive", "tiled", "register_tiled", "register_tiled_128" or "register_tiled_64".
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name);
+
+// The kernel that computes an m x n output on a GPU with `sm_count` SMs.
+// RegisterTiled becomes RegisterTiled64 when the output has fewer 128x128
+// tiles than the GPU has SMs, so that no SM sits idle, and RegisterTiled128
+// otherwise. Every other kernel is returned unchanged.
+MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int sm_count);
 
 struct CudaOptions {
 	int device = 0;
@@ -75,6 +83,7 @@ public:
 
 	virtual std::size_t kernel_launches() const = 0;              // per enqueue()
 	virtual std::vector<std::string> kernel_sources() const = 0;  // generated elementwise kernels
+	virtual std::vector<MatmulKernel> matmul_kernels() const = 0; // the kernel each matmul runs, in order
 	virtual double jit_compile_ms() const = 0;                    // NVRTC time spent compiling this graph
 };
 

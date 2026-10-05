@@ -13,6 +13,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
 
 using namespace minicompiler;
 using minicompiler::testutil::all_close;
@@ -116,14 +117,15 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 	REQUIRE_GPU();
 	// Each side is within gamma_k * sum|a b| of the exact dot product, so they
 	// differ by at most twice that (plus each side's final rounding). The
-	// shapes straddle the 32 and 128 tile sizes and the K step of 8, so the
-	// zero-padded edge tiles are exercised.
+	// shapes straddle the 32, 64 and 128 tile sizes and the K step of 8, so
+	// the zero-padded edge tiles are exercised.
 	const std::vector<std::array<std::int64_t, 3>> shapes = {
-		{1, 1, 1},       {3, 5, 7},       {1, 1000, 1},     {33, 257, 65},  {127, 129, 131},
-		{128, 128, 128}, {129, 13, 129},  {256, 256, 256},  {16, 4099, 16}, {513, 77, 259}};
+		{1, 1, 1},       {3, 5, 7},      {1, 1000, 1},    {33, 257, 65},  {65, 9, 63},     {127, 129, 131},
+		{128, 128, 128}, {129, 13, 129}, {256, 256, 256}, {16, 4099, 16}, {513, 77, 259}};
 	const double u = std::ldexp(1.0, -24);
 	for (const cuda::MatmulKernel kernel :
-	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled}) {
+	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
+	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64}) {
 		cuda::CudaOptions options;
 		options.matmul = kernel;
 		for (const auto& [m, k, n] : shapes) {
@@ -151,6 +153,55 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 			}
 		}
 	}
+}
+
+TEST(CudaBackend, MatmulKernelNamesRoundTrip) {
+	for (const cuda::MatmulKernel kernel :
+	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
+	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64}) {
+		Result<cuda::MatmulKernel> parsed = cuda::matmul_kernel_from_name(cuda::matmul_kernel_name(kernel));
+		ASSERT_TRUE(parsed.ok());
+		EXPECT_EQ(parsed.value(), kernel);
+	}
+	EXPECT_FALSE(cuda::matmul_kernel_from_name("register_tiled_32").ok());
+}
+
+TEST(CudaBackend, RegisterTiledUses64x64TilesWhen128x128WouldLeaveSmsIdle) {
+	using cuda::MatmulKernel;
+	auto resolve = [](int m, int n, int sms) {
+		return cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled, m, n, sms);
+	};
+	EXPECT_EQ(resolve(512, 512, 30), MatmulKernel::RegisterTiled64);     // 4 x 4 = 16 tiles for 30 SMs
+	EXPECT_EQ(resolve(128, 2048, 30), MatmulKernel::RegisterTiled64);    // 1 x 16
+	EXPECT_EQ(resolve(640, 640, 30), MatmulKernel::RegisterTiled64);     // 25
+	EXPECT_EQ(resolve(640, 768, 30), MatmulKernel::RegisterTiled128);    // 30: one tile per SM
+	EXPECT_EQ(resolve(1000, 1000, 30), MatmulKernel::RegisterTiled128);  // 64, edge tiles count
+	EXPECT_EQ(resolve(640, 640, 25), MatmulKernel::RegisterTiled128);    // fewer SMs, same shape
+	EXPECT_EQ(resolve(std::numeric_limits<int>::max(), 1, 30), MatmulKernel::RegisterTiled128);  // m + 127 overflows int
+	// Any other kernel is left alone.
+	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled128, 1, 1, 30), MatmulKernel::RegisterTiled128);
+	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled64, 4096, 4096, 30), MatmulKernel::RegisterTiled64);
+	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::Naive, 1, 1, 30), MatmulKernel::Naive);
+}
+
+TEST(CudaBackend, CompiledGraphsReportTheMatmulKernelForEachShape) {
+	REQUIRE_GPU();
+	const int sms = cuda::query_device(0).value().sm_count;
+	GraphBuilder b("two_layers");
+	NodeId x = b.input("x", {128, 512});
+	NodeId h = b.matmul(x, b.input("w1", {512, 2048}));
+	b.output(b.matmul(h, b.input("w2", {2048, 4096})));
+	auto exe = cuda::compile_for_cuda(std::move(b).build().value()).value();
+	const std::vector<cuda::MatmulKernel> expected = {
+		cuda::resolve_matmul_kernel(cuda::MatmulKernel::RegisterTiled, 128, 2048, sms),
+		cuda::resolve_matmul_kernel(cuda::MatmulKernel::RegisterTiled, 128, 4096, sms)};
+	EXPECT_EQ(exe->matmul_kernels(), expected);
+	cuda::CudaOptions options;
+	options.matmul = cuda::MatmulKernel::Tiled;
+	GraphBuilder b2("one_layer");
+	b2.output(b2.matmul(b2.input("x", {8, 8}), b2.input("w", {8, 8})));
+	EXPECT_EQ(cuda::compile_for_cuda(std::move(b2).build().value(), options).value()->matmul_kernels(),
+	          std::vector<cuda::MatmulKernel>{cuda::MatmulKernel::Tiled});
 }
 
 TEST(CudaBackend, BenchmarkGraphsMatchTheCpuBackendFusedAndUnfused) {

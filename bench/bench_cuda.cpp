@@ -317,24 +317,29 @@ int run_matmul(const std::string& out_path, double seconds) {
 	};
 	const std::vector<Shape3> shapes = {
 		{512, 512, 512, "512^3"},
+		{640, 640, 640, "640^3"},
 		{1024, 1024, 1024, "1024^3"},
 		{2048, 2048, 2048, "2048^3"},
 		{4096, 4096, 4096, "4096^3"},
 		{1000, 1000, 1000, "1000^3 (not a tile multiple)"},
 		{1023, 1029, 1031, "1023x1029x1031 (odd)"},
+		{256, 1024, 1024, "256x1024x1024 (matmul_bias_relu)"},
 		{128, 512, 2048, "128x512x2048 (MLP layer 1, B=128)"},
+		{128, 2048, 512, "128x2048x512 (MLP layer 2, B=128)"},
 		{512, 2048, 512, "512x2048x512 (MLP layer 2, B=512)"},
 	};
 
 	bench::JsonWriter json;
 	json.begin_object();
 	json.field("benchmark", "FP32 matmul C[m,n] = A[m,k] B[k,n] (row-major): naive, shared-memory tiled and "
-	                        "register-tiled kernels against cuBLAS");
+	                        "register-tiled (128x128 and 64x64 tiles) kernels against cuBLAS");
 	json.field("method", "CUDA events around each kernel on one stream; 3 warmup runs per variant, then interleaved "
 	                     "rounds (rotating order); time = median over rounds; GFLOP/s = 2mnk / time; ratios are "
 	                     "medians over rounds of per-round ratios. Each kernel's result is checked on 1000 sampled "
 	                     "elements against a float64 dot product within the FP32 error bound. cuBLAS runs in "
-	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores)");
+	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores). "
+	                     "register_tiled_picks is the tile size the backend's register_tiled kernel uses for the "
+	                     "shape: 64x64 when the output has fewer 128x128 tiles than the GPU has SMs");
 	bench::write_environment(json);
 	json.key("peak_fp32_gflops").begin_object();
 	json.field("at_max_sm_clock", peak_at_max_clock).field("max_sm_clock_mhz", max_clock);
@@ -343,7 +348,7 @@ int run_matmul(const std::string& out_path, double seconds) {
 	json.field("formula", "2 x SMs x FP32 lanes per SM x clock");
 	json.end_object();
 	json.key("results").begin_array();
-	std::printf("%-36s %-15s %10s %10s %11s %10s\n", "shape (m x k x n)", "kernel", "median ms", "GFLOP/s",
+	std::printf("%-36s %-19s %10s %10s %11s %10s\n", "shape (m x k x n)", "kernel", "median ms", "GFLOP/s",
 	            "% of peak", "% cuBLAS");
 	for (const Shape3& s : shapes) {
 		const std::size_t a_n = static_cast<std::size_t>(s.m) * s.k;
@@ -359,8 +364,8 @@ int run_matmul(const std::string& out_path, double seconds) {
 		CHECK_CUDA(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice));
 
 		std::vector<MatmulVariant> variants;
-		for (cuda::MatmulKernel kernel :
-		     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled}) {
+		for (cuda::MatmulKernel kernel : {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
+		                                  cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64}) {
 			variants.push_back({cuda::matmul_kernel_name(kernel), [=](cudaStream_t st) {
 				                    CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, st));
 			                    }, {}});
@@ -427,8 +432,12 @@ int run_matmul(const std::string& out_path, double seconds) {
 		const double flops = 2.0 * s.m * s.n * s.k;
 		const MatmulVariant& naive = variants[0];
 		const MatmulVariant& cublas = variants.back();
+		const std::string picks = cuda::matmul_kernel_name(
+		    cuda::resolve_matmul_kernel(cuda::MatmulKernel::RegisterTiled, s.m, s.n, device.sm_count));
 		json.begin_object();
 		json.field("shape", s.label).field("m", s.m).field("k", s.k).field("n", s.n);
+		json.field("tiles_128x128", ((s.m + 127) / 128) * ((s.n + 127) / 128));
+		json.field("register_tiled_picks", picks);
 		json.field("sm_clock_mhz_median", clock_now);
 		json.key("kernels").begin_array();
 		for (const MatmulVariant& v : variants) {
@@ -442,8 +451,8 @@ int run_matmul(const std::string& out_path, double seconds) {
 			if (peak_now > 0) json.field("percent_of_peak_at_measured_clock", 100.0 * gflops / peak_now);
 			json.field("percent_of_cublas", of_cublas).field("speedup_over_naive", paired(naive, v));
 			json.end_object();
-			std::printf("%-36s %-15s %10.3f %10.0f %10.1f%% %9.1f%%\n", s.label, v.name.c_str(), t.median_ms, gflops,
-			            100.0 * gflops / peak_at_max_clock, of_cublas);
+			std::printf("%-36s %-19s %10.3f %10.0f %10.1f%% %9.1f%%%s\n", s.label, v.name.c_str(), t.median_ms,
+			            gflops, 100.0 * gflops / peak_at_max_clock, of_cublas, v.name == picks ? "  <- picked" : "");
 		}
 		json.end_array();
 		json.end_object();
