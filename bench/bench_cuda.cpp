@@ -23,6 +23,7 @@
 
 #include <cublas_v2.h>
 #include <cuda_runtime.h>
+#include <nvtx3/nvToolsExt.h>
 
 #include <algorithm>
 #include <cmath>
@@ -486,12 +487,94 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 
 }
 
+// One launch of every kernel, each inside its own NVTX range named
+// "<workload>.<kernel>", for Nsight Compute (scripts/profile_kernels_ncu.sh).
+// Nothing is timed. Each kernel first runs once outside the ranges, so module
+// loading and cuBLAS's first-call setup stay out of the profile. `only`
+// restricts the run to one label; `list` prints the labels without running.
+int run_profile(const std::string& graph_dir, const std::string& only, bool list) {
+	const cuda::DeviceInfo device = must(cuda::query_device(0), "query_device");
+	CHECK_CUDA(cudaSetDevice(0));
+	cudaStream_t stream;
+	CHECK_CUDA(cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking));
+	cublasHandle_t handle;
+	CHECK_CUBLAS(cublasCreate(&handle));
+	CHECK_CUBLAS(cublasSetStream(handle, stream));
+	CHECK_CUBLAS(cublasSetMathMode(handle, CUBLAS_DEFAULT_MATH));
+	auto profiled = [&](const std::string& label, const std::function<void()>& launch) {
+		if (!only.empty() && label != only) return;
+		if (list) {
+			std::printf("%s\n", label.c_str());
+			return;
+		}
+		launch();
+		CHECK_CUDA(cudaStreamSynchronize(stream));
+		nvtxRangePushA(label.c_str());
+		launch();
+		CHECK_CUDA(cudaStreamSynchronize(stream));
+		nvtxRangePop();
+		std::printf("%s\n", label.c_str());
+	};
+
+	// The GELU chain at 64 MB, one kernel per op and fused.
+	ParseOptions options;
+	options.dims = {{"M", 4096}, {"N", 4096}};
+	const Graph input = must(parse_graph_file(graph_dir + "/gelu_chain.mcg", options), "parse");
+	const std::vector<HostTensor> inputs = make_random_inputs(input, 1);
+	const std::vector<std::pair<const char*, const char*>> pipelines = {{"unfused", "dne,fold,dne"},
+	                                                                     {"fused", "default"}};
+	for (const auto& [name, passes] : pipelines) {
+		const Graph g = must(run_pipeline(input, must(parse_pipeline(passes), "pipeline")), "passes");
+		std::unique_ptr<cuda::CudaExecutable> exe = must(cuda::compile_for_cuda(g), "compile");
+		must(exe->upload_inputs({inputs[0].data.data()}), "upload");
+		profiled(std::string("gelu_64MB.") + name, [&] { must(exe->enqueue(stream), "enqueue"); });
+	}
+
+	// Every matmul kernel and cuBLAS on a large and a small square and on the
+	// small-output, long-K layer of the B=128 MLP block.
+	struct Shape3 {
+		int m, k, n;
+	};
+	for (const Shape3& s : {Shape3{2048, 2048, 2048}, Shape3{512, 512, 512}, Shape3{128, 2048, 512}}) {
+		const std::string label = "matmul_" + std::to_string(s.m) + "x" + std::to_string(s.k) + "x" + std::to_string(s.n);
+		const std::size_t a_n = static_cast<std::size_t>(s.m) * s.k;
+		const std::size_t b_n = static_cast<std::size_t>(s.k) * s.n;
+		const std::vector<float> a = uniform_values(a_n, 1, -1.0f, 1.0f);
+		const std::vector<float> b = uniform_values(b_n, 2, -1.0f, 1.0f);
+		float *da, *db, *dc;
+		CHECK_CUDA(cudaMalloc(&da, a_n * sizeof(float)));
+		CHECK_CUDA(cudaMalloc(&db, b_n * sizeof(float)));
+		CHECK_CUDA(cudaMalloc(&dc, static_cast<std::size_t>(s.m) * s.n * sizeof(float)));
+		CHECK_CUDA(cudaMemcpy(da, a.data(), a_n * sizeof(float), cudaMemcpyHostToDevice));
+		CHECK_CUDA(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice));
+		for (cuda::MatmulKernel kernel : {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
+		                                  cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64}) {
+			profiled(label + "." + cuda::matmul_kernel_name(kernel),
+			         [&] { CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, stream)); });
+		}
+		profiled(label + ".cublas", [&] {
+			const float alpha = 1.0f, beta = 0.0f;
+			CHECK_CUBLAS(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, s.n, s.m, s.k, &alpha, db, s.n, da, s.k, &beta,
+			                         dc, s.n));
+		});
+		CHECK_CUDA(cudaFree(da));
+		CHECK_CUDA(cudaFree(db));
+		CHECK_CUDA(cudaFree(dc));
+	}
+	CHECK_CUBLAS(cublasDestroy(handle));
+	CHECK_CUDA(cudaStreamDestroy(stream));
+	if (!list) std::printf("profiled on %s (%d SMs)\n", device.name.c_str(), device.sm_count);
+	return 0;
+}
+
 int main(int argc, char** argv) {
 	std::string suite = "elementwise";
 	std::string out_path;
 	std::string graph_dir = std::string(MINICOMPILER_SOURCE_DIR) + "/bench/graphs";
 	double seconds = 2.0;
 	double warmup_seconds = 1.0;
+	std::string only;  // --suite profile: run one label
+	bool list = false; // --suite profile: print the labels
 	for (int i=1; i<argc; ++i) {
 		const std::string a = argv[i];
 		if (a == "--suite" && i + 1 < argc) {
@@ -503,8 +586,13 @@ int main(int argc, char** argv) {
 		} else if (a == "--quick") {
 			seconds = 0.2;
 			warmup_seconds = 0.2;
+		} else if (a == "--only" && i + 1 < argc) {
+			only = argv[++i];
+		} else if (a == "--list") {
+			list = true;
 		} else {
-			std::cerr << "usage: bench_cuda [--suite elementwise|matmul] [--out FILE] [--graphs DIR] [--quick]\n";
+			std::cerr << "usage: bench_cuda [--suite elementwise|matmul] [--out FILE] [--graphs DIR] [--quick]\n"
+			             "       bench_cuda --suite profile [--list | --only LABEL] [--graphs DIR]\n";
 			return 1;
 		}
 	}
@@ -513,6 +601,7 @@ int main(int argc, char** argv) {
 	setenv("NVIDIA_TF32_OVERRIDE", "0", 1);
 	if (suite == "elementwise") return run_elementwise(graph_dir, out_path, warmup_seconds, seconds);
 	if (suite == "matmul") return run_matmul(out_path, warmup_seconds, seconds);
+	if (suite == "profile") return run_profile(graph_dir, only, list);
 	std::cerr << "unknown suite '" << suite << "'\n";
 	return 1;
 }
