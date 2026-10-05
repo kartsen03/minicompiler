@@ -87,6 +87,8 @@ double current_sm_clock_mhz(int device = 0);
 // once and call enqueue().
 class CudaExecutable : public Executable {
 public:
+	// Copies the inputs to the device; returns once they are there, so kernels
+	// enqueued afterwards on any stream see them.
 	virtual Status upload_inputs(const std::vector<const float*>& host_inputs) = 0;
 	// Launches every kernel in order on `stream` (a cudaStream_t; nullptr means
 	// the executable's own stream) with no copies and no synchronization.

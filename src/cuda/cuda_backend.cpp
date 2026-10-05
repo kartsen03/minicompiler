@@ -158,6 +158,9 @@ public:
 			MC_CUDA_RETURN(cudaMemcpyAsync(value_[id], host_inputs[k], graph_.node(id).type.size_bytes(),
 			                               cudaMemcpyHostToDevice, stream_));
 		}
+		// The copies are on this executable's stream; kernels may be enqueued on
+		// another one, which would not wait for them.
+		MC_CUDA_RETURN(cudaStreamSynchronize(stream_));
 		return Status();
 	}
 

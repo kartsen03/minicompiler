@@ -357,6 +357,7 @@ ErrorBound tensor_core_bound(int k, double u, double spacing) {
 struct SampledError {
 	bool within_bound = true;
 	double max_over_abs_dot = 0;  // the largest |c - exact| / sum|a b| among the samples
+	std::string first_failure;    // the first sample outside the bound, for the error message
 };
 
 // Compares `samples` random elements of C with a float64 dot product. A NaN
@@ -377,8 +378,13 @@ SampledError sampled_error(const std::vector<float>& a, const std::vector<float>
 			abs_sum += std::fabs(p);
 		}
 		const double err = std::fabs(c[static_cast<std::size_t>(r) * n + col] - exact);
-		if (!(err <= bound.per_abs_dot * abs_sum + bound.per_exact * std::fabs(exact) + bound.absolute)) {
+		const double limit = bound.per_abs_dot * abs_sum + bound.per_exact * std::fabs(exact) + bound.absolute;
+		if (!(err <= limit) && e.within_bound) {
 			e.within_bound = false;
+			e.first_failure = "C[" + std::to_string(r) + "][" + std::to_string(col) + "] = " +
+			                  std::to_string(c[static_cast<std::size_t>(r) * n + col]) + ", exact " +
+			                  std::to_string(exact) + ", error " + std::to_string(err) + " > bound " +
+			                  std::to_string(limit);
 		}
 		e.max_over_abs_dot = std::max(e.max_over_abs_dot, abs_sum > 0 ? err / abs_sum : err);
 	}
@@ -501,6 +507,10 @@ struct MatmulOperands {
 		CHECK_CUDA(cudaMalloc(&dc, static_cast<std::size_t>(s.m) * s.n * sizeof(float)));
 		CHECK_CUDA(cudaMemcpy(da, a.data(), a.size() * sizeof(float), cudaMemcpyHostToDevice));
 		CHECK_CUDA(cudaMemcpy(db, b.data(), b.size() * sizeof(float), cudaMemcpyHostToDevice));
+		// From pageable memory, cudaMemcpy can return before the copy reaches the
+		// device, and the kernels run on a non-blocking stream that does not wait
+		// for it: without this, a first launch could read A or B half-written.
+		CHECK_CUDA(cudaDeviceSynchronize());
 	}
 	MatmulOperands(const MatmulOperands&) = delete;
 	MatmulOperands& operator=(const MatmulOperands&) = delete;
@@ -589,8 +599,10 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 
 		// Correctness first: every variant, cuBLAS included, against float64.
 		for (MatmulVariant& v : variants) {
-			if (!run_and_check(v, stream, ops.a, ops.b, dc, s.m, s.n, s.k).within_bound) {
-				std::fprintf(stderr, "%s gives wrong results for %s\n", v.name.c_str(), s.label);
+			const SampledError e = run_and_check(v, stream, ops.a, ops.b, dc, s.m, s.n, s.k);
+			if (!e.within_bound) {
+				std::fprintf(stderr, "%s gives wrong results for %s: %s\n", v.name.c_str(), s.label,
+				             e.first_failure.c_str());
 				return 1;
 			}
 		}
@@ -763,8 +775,8 @@ int run_tensor_core(const std::string& out_path, double warmup_seconds, double s
 		for (MatmulVariant& v : variants) {
 			v.error = run_and_check(v, stream, ops.a, ops.b, dc, s.m, s.n, s.k);
 			if (!v.error.within_bound) {
-				std::fprintf(stderr, "%s (%s inputs) gives wrong results for %s\n", v.name.c_str(), v.format.c_str(),
-				             s.label);
+				std::fprintf(stderr, "%s (%s inputs) gives wrong results for %s: %s\n", v.name.c_str(),
+				             v.format.c_str(), s.label, v.error.first_failure.c_str());
 				return 1;
 			}
 		}
