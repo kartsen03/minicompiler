@@ -13,6 +13,7 @@ run's headline numbers, with the minimum and maximum across runs.
     scripts/aggregate_results.py torch OUT.json RUN1.json RUN2.json ...
     scripts/aggregate_results.py gpu_elementwise OUT.json RUN1.json ...
     scripts/aggregate_results.py gpu_matmul OUT.json RUN1.json ...
+    scripts/aggregate_results.py gpu_tensor_core OUT.json RUN1.json ...
 """
 
 from __future__ import annotations
@@ -138,8 +139,29 @@ def aggregate_gpu_matmul(runs: list[dict]) -> dict:
     return out
 
 
+def aggregate_gpu_tensor_core(runs: list[dict]) -> dict:
+    out = header(runs)
+    results = []
+    for i, first in enumerate(runs[0]["results"]):
+        per_run = [r["results"][i] for r in runs]
+        entry = {k: first[k] for k in ("shape", "m", "k", "n", "auto_picks", "split_k_splits", "tensor_core_splits")}
+        entry["sm_clock_mhz_median"] = spread([p["sm_clock_mhz_median"] for p in per_run])
+        kernels = []
+        for j, kern in enumerate(first["kernels"]):
+            agg = {"kernel": kern["kernel"], "format": kern["format"]}
+            agg["median_ms"] = spread([p["kernels"][j]["timing"]["median_ms"] for p in per_run])
+            for k in ("tflops", "speedup_over_fp32_default", "percent_of_cublas_same_format"):
+                agg[k] = spread([p["kernels"][j][k] for p in per_run])
+            agg["max_error_over_abs_dot"] = max(p["kernels"][j]["max_error_over_abs_dot"] for p in per_run)
+            kernels.append(agg)
+        entry["kernels"] = kernels
+        results.append(entry)
+    out["results"] = results
+    return out
+
+
 MODES = {"passes": aggregate_passes, "torch": aggregate_torch, "gpu_elementwise": aggregate_gpu_elementwise,
-         "gpu_matmul": aggregate_gpu_matmul}
+         "gpu_matmul": aggregate_gpu_matmul, "gpu_tensor_core": aggregate_gpu_tensor_core}
 
 
 def main() -> int:

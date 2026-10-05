@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -183,6 +184,51 @@ def gpu_matmul(results: str = "results/gpu") -> str:
     return "\n".join(rows)
 
 
+TENSOR_FORMATS = [("tf32", "TF32"), ("bf16", "BF16"), ("f16", "FP16")]
+
+
+def gpu_tensor_core(results: str = "results/gpu") -> str:
+    d = load(f"{results}/tensor_core.json")
+    if not d:
+        return "_Not recorded yet._"
+    formats = [(f, label) for f, label in TENSOR_FORMATS
+               if any(x["format"] == f for x in d["results"][0]["kernels"])]
+    rows = ["| Shape (m × k × n) | FP32: default / cuBLAS | "
+            + " | ".join(f"{label}: ours / cuBLAS (ours as % of cuBLAS)" for _, label in formats) + " |",
+            "|---|---:|" + "---:|" * len(formats)]
+    worst: dict[tuple[str, str], float] = {}
+    for r in d["results"]:
+        by = {(x["kernel"] if x["kernel"] == "cublas" else "ours", x["format"]): x for x in r["kernels"]}
+        by[("ours", "fp32")] = next(x for x in r["kernels"] if x["kernel"] == "auto")
+        for key, x in by.items():
+            worst[key] = max(worst.get(key, 0.0), x["max_error_over_abs_dot"])
+
+        def t(key: tuple[str, str]) -> str:
+            return f"{by[key]['tflops']['median']:.1f}"
+
+        cells = [f"{t(('ours', 'fp32'))} / {t(('cublas', 'fp32'))}"]
+        for f, _ in formats:
+            pct = by[("ours", f)]["percent_of_cublas_same_format"]
+            cells.append(f"{t(('ours', f))} / {t(('cublas', f))} ({pct['median']:.0f}%)")
+        rows.append(f"| {r['shape']} | " + " | ".join(cells) + " |")
+    rows.append("")
+    rows.append("| Inputs rounded to | Unit roundoff | Largest \\|c − exact\\| / Σ\\|ab\\|, ours | cuBLAS |")
+    rows.append("|---|---:|---:|---:|")
+    roundoff = {f["format"]: f["unit_roundoff"] for f in d["formats"]}
+    roundoff["fp32"] = 2.0 ** -24
+    for f, label in [("fp32", "FP32 (no rounding)")] + formats:
+        rows.append(f"| {label} | 2^{round(math.log2(roundoff[f]))} | {worst[('ours', f)]:.2e} | "
+                    f"{worst[('cublas', f)]:.2e} |")
+    rows.append("")
+    rows.append(f"TFLOP/s = 2mnk / GPU time, median across {d['runs']} runs, timed as in the FP32 table; the "
+                "percentage is the median over rounds of cuBLAS time / our time. Our kernels and cuBLAS get the same "
+                "FP32 matrices: cuBLAS through cublasGemmEx with CUBLAS_COMPUTE_32F_FAST_TF32, _FAST_16BF or "
+                "_FAST_16F, which round the inputs to the format and accumulate in FP32, as ours do. Errors are "
+                "the largest over 1000 sampled elements of every shape, against a float64 dot product; every "
+                "variant is also checked against its format's error bound. " + gpu_line(d))
+    return "\n".join(rows)
+
+
 def gpu_torch(results: str = "results/gpu") -> str:
     d = load(f"{results}/torch_compare.json")
     if not d:
@@ -218,6 +264,7 @@ TABLES = {
     "cpu-torch-tuned": lambda: cpu_torch("results/cpu/torch_compare_tuned_malloc.json"),
     "gpu-elementwise": gpu_elementwise,
     "gpu-matmul": gpu_matmul,
+    "gpu-tensor-core": gpu_tensor_core,
     "gpu-torch": gpu_torch,
 }
 
@@ -229,7 +276,8 @@ def main() -> int:
     ap.add_argument("--readme", default=str(ROOT / "README.md"))
     args = ap.parse_args()
     if args.gpu:  # relative to the repository root, or absolute
-        for name, fn in [("gpu-elementwise", gpu_elementwise), ("gpu-matmul", gpu_matmul), ("gpu-torch", gpu_torch)]:
+        for name, fn in [("gpu-elementwise", gpu_elementwise), ("gpu-matmul", gpu_matmul),
+                         ("gpu-tensor-core", gpu_tensor_core), ("gpu-torch", gpu_torch)]:
             print(f"## {name}\n\n{fn(args.gpu)}\n")
         return 0
     if args.print:

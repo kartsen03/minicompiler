@@ -8,12 +8,14 @@ NCU_DIR holds one `<label>.csv` per workload (`ncu --page raw --csv
 Writes to DOCS_DIR:
 
   summary.md   the GELU chain's DRAM traffic unfused vs fused, and per matmul
-               kernel: time, GFLOP/s, registers, occupancy, FMA-pipe use,
-               shared-memory bank conflicts, cache hit rates, DRAM throughput
-               and the top warp stall reasons
+               kernel: time, GFLOP/s, registers, occupancy, FMA-pipe use (or,
+               for tensor cores, tensor throughput against the peak of the
+               path used), shared-memory bank conflicts, cache hit rates,
+               DRAM throughput and the top warp stall reasons
   metrics.csv  the same numbers, one row per workload
   roofline.svg every workload on a roofline: FLOP per DRAM byte against
-               GFLOP/s, under the DRAM and FP32 roofs
+               GFLOP/s, under the DRAM roof, the FP32 roof and the roof of each
+               tensor path used (peaks as Nsight Compute reports them)
 """
 
 from __future__ import annotations
@@ -55,6 +57,8 @@ METRICS = {
     "sm_count": ["device__attribute_multiprocessor_count"],
 }
 STALL = re.compile(r"smsp__average_warps_issue_stalled_(\w+?)_per_issue_active\.ratio$")
+# Tensor-core work by input format, dense, accumulating in FP32: ops = FLOPs.
+TENSOR_OPS = re.compile(r"sm__ops_path_tensor_src_(tf32|bf16|fp16)_dst_fp32_sparsity_off\.sum$")
 
 
 def number(text: str) -> float:
@@ -98,6 +102,20 @@ def summarize(label: str, kernels: list[dict[str, str]]) -> dict:
                 "smem_ld_conflicts", "smem_ld_wavefronts", "l1_hit", "l2_hit", "sm_hz", "sm_count"):
         s[key] = pick(main, key)
     s["stalls"] = stalls(main)
+    # The tensor path the workload used most, its share of that path's peak
+    # in the longest kernel, and the peak in ops per SM per clock.
+    ops: dict[str, float] = {}
+    for k in kernels:
+        for name, value in k.items():
+            if (m := TENSOR_OPS.match(name)) and value.strip():
+                ops[m.group(1)] = ops.get(m.group(1), 0.0) + number(value)
+    path = max(ops, key=ops.get) if ops and max(ops.values()) > 0 else ""
+    s["tensor_path"] = path
+    s["tensor_flops"] = ops.get(path, 0.0)
+    if path:
+        base = f"sm__ops_path_tensor_src_{path}_dst_fp32_sparsity_off"
+        s["tensor_pct"] = number(main.get(f"{base}.sum.pct_of_peak_sustained_elapsed", ""))
+        s["tensor_peak_per_sm_clock"] = number(main.get(f"{base}.avg.peak_sustained", ""))
     return s
 
 
@@ -120,8 +138,10 @@ def device_peaks() -> tuple[float, int, int]:
     return d["peak_bandwidth_gbs"], d["sm_count"], d["fp32_lanes_per_sm"]
 
 
-def roofline_svg(points: list[tuple[str, float, float]], peak_bw: float, peak_flops: float) -> str:
-    """A log-log roofline: x = FLOP per DRAM byte, y = GFLOP/s."""
+def roofline_svg(points: list[tuple[str, float, float]], peak_bw: float, peak_flops: float,
+                 tensor_roofs: dict[str, float]) -> str:
+    """A log-log roofline: x = FLOP per DRAM byte, y = GFLOP/s, with a dashed
+    roof per tensor path (input format) at its peak."""
     w, h, left, bottom, top, right = 760, 460, 70, 50, 20, 20
     x0, x1, y0, y1 = 0.05, 2000.0, 10.0, 30000.0
 
@@ -147,8 +167,21 @@ def roofline_svg(points: list[tuple[str, float, float]], peak_bw: float, peak_fl
     out.append(f'<text x="{px(x1) - 4:.1f}" y="{py(peak_flops) - 6:.1f}" text-anchor="end">FP32 peak at the profiling '
                f'clock: {peak_flops:,.0f} GFLOP/s</text>')
     out.append(f'<text x="{px(0.12):.1f}" y="{py(peak_bw * 0.12) - 8:.1f}">DRAM {peak_bw:.0f} GB/s</text>')
+    # Paths with the same peak share a roof and a label.
+    by_peak: dict[int, list[str]] = {}
+    for path, roof in tensor_roofs.items():
+        by_peak.setdefault(round(roof), []).append(path.upper())
+    for roof, paths in sorted(by_peak.items()):
+        knee_t = roof / peak_bw
+        out.append(f'<polyline fill="none" stroke="#333" stroke-width="1.5" stroke-dasharray="6 4" '
+                   f'points="{px(knee_t):.1f},{py(roof):.1f} {px(x1):.1f},{py(roof):.1f}"/>')
+        out.append(f'<text x="{px(x1) - 4:.1f}" y="{py(roof) - 6:.1f}" text-anchor="end">'
+                   f'{" and ".join(sorted(paths))} tensor peak: {roof:,.0f} GFLOP/s</text>')
     colors = {"naive": "#999", "tiled": "#e69f00", "register_tiled_128": "#0072b2", "register_tiled_64": "#56b4e9",
-              "cublas": "#d55e00", "unfused": "#cc79a7", "fused": "#009e73"}
+              "vectorized": "#332288", "double_buffered": "#117733", "split_k": "#44aa99", "cublas": "#d55e00",
+              "tensor_core_tf32": "#88ccee", "tensor_core_bf16": "#ddcc77", "tensor_core_f16": "#aa4499",
+              "cublas_tf32": "#882255", "cublas_bf16": "#999933", "cublas_f16": "#661100",
+              "unfused": "#cc79a7", "fused": "#009e73"}
     for label, ai, gflops in points:
         kernel = label.split(".")[-1]
         color = colors.get(kernel, "#000")
@@ -202,35 +235,64 @@ def main() -> int:
             shape = r["label"].split(".")[0].removeprefix("matmul_")
             if shape not in shapes:
                 shapes.append(shape)
-    order = ["naive", "tiled", "register_tiled_128", "register_tiled_64", "cublas"]
+    fp32_order = ["naive", "tiled", "register_tiled_128", "register_tiled_64", "vectorized", "double_buffered",
+                  "split_k", "cublas"]
+    tensor_order = ["tensor_core_tf32", "cublas_tf32", "tensor_core_bf16", "cublas_bf16", "tensor_core_f16",
+                    "cublas_f16"]
     for shape in shapes:
         m, k, n = (int(x) for x in shape.split("x"))
+        by_kernel = {r["label"].split(".")[1]: r for r in rows if r["label"].startswith(f"matmul_{shape}.")}
+
+        def common(name: str, r: dict) -> tuple[str, str, str]:
+            conflicts = (f"{r['smem_ld_conflicts'] / r['smem_ld_wavefronts']:.0%} of wavefronts"
+                         if r["smem_ld_wavefronts"] > 0 else "no shared loads")
+            st = ", ".join(f"{s} {v:.1f}" for s, v in r["stalls"])
+            label = name if not name.startswith("cublas") else f"{name} (`{short(r['main_kernel'])}`)"
+            return label, conflicts, st
+
         out += [f"## Matmul {shape} (m × k × n)", "",
                 "| Kernel | Time | GFLOP/s | Regs | Block × grid | Occupancy achieved / theoretical | FMA pipe | "
                 "Shared-load bank conflicts | L1 hit | L2 hit | DRAM | Top stall reasons (cycles per issue) |",
                 "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
-        by_kernel = {r["label"].split(".")[1]: r for r in rows if r["label"].startswith(f"matmul_{shape}.")}
-        for name in order:
+        for name in fp32_order:
             r = by_kernel.get(name)
             if not r:
                 continue
             gflops = 2.0 * m * n * k / r["time_ns"]
-            conflicts = (f"{r['smem_ld_conflicts'] / r['smem_ld_wavefronts']:.0%} of wavefronts"
-                         if r["smem_ld_wavefronts"] > 0 else "no shared loads")
-            st = ", ".join(f"{s} {v:.1f}" for s, v in r["stalls"])
-            label = name if name != "cublas" else f"cublas (`{short(r['main_kernel'])}`)"
+            label, conflicts, st = common(name, r)
             out.append(f"| {label} | {r['time_ns'] / 1e3:,.1f} µs | {gflops:,.0f} | {r['registers']:.0f} | "
                        f"{r['block']:.0f} × {r['grid']:.0f} | {r['occ_achieved']:.0f}% / {r['occ_theoretical']:.0f}% | "
                        f"{r['fma_pct']:.0f}% | {conflicts} | {r['l1_hit']:.0f}% | {r['l2_hit']:.0f}% | "
                        f"{r['dram_pct']:.0f}% | {st} |")
         out.append("")
+        tensor = [(name, by_kernel[name]) for name in tensor_order if name in by_kernel]
+        if tensor:
+            out += [f"Tensor cores on {shape}: the inputs rounded to each format, FP32 accumulation. Tensor "
+                    "throughput is the tensor ops executed against the peak of the path used, as Nsight Compute "
+                    "reports both.", "",
+                    "| Kernel | Time | GFLOP/s | Regs | Block × grid | Occupancy achieved / theoretical | "
+                    "Tensor throughput (path) | Shared-load bank conflicts | L2 hit | DRAM | "
+                    "Top stall reasons (cycles per issue) |",
+                    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
+            for name, r in tensor:
+                gflops = 2.0 * m * n * k / r["time_ns"]
+                label, conflicts, st = common(name, r)
+                path = (f"{r['tensor_pct']:.0f}% ({r['tensor_path'].upper()} → FP32)" if r["tensor_path"]
+                        else "no tensor ops")
+                out.append(f"| {label} | {r['time_ns'] / 1e3:,.1f} µs | {gflops:,.0f} | {r['registers']:.0f} | "
+                           f"{r['block']:.0f} × {r['grid']:.0f} | {r['occ_achieved']:.0f}% / "
+                           f"{r['occ_theoretical']:.0f}% | {path} | {conflicts} | {r['l2_hit']:.0f}% | "
+                           f"{r['dram_pct']:.0f}% | {st} |")
+            out.append("")
     (docs / "summary.md").write_text("\n".join(out), encoding="utf-8", newline="\n")
 
     fields = ["label", "kernels", "main_kernel", "time_ns", "flops", "dram_read", "dram_write", "dram_pct", "sm_pct",
               "occ_achieved", "occ_theoretical", "registers", "block", "grid", "fma_pct", "smem_ld_conflicts",
-              "smem_ld_wavefronts", "l1_hit", "l2_hit", "sm_hz"]
+              "smem_ld_wavefronts", "l1_hit", "l2_hit", "sm_hz", "tensor_path", "tensor_flops", "tensor_pct",
+              "tensor_peak_per_sm_clock"]
     with open(docs / "metrics.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fields + ["stalls"], extrasaction="ignore")
+        w = csv.DictWriter(f, fieldnames=fields + ["stalls"], extrasaction="ignore", lineterminator="
+")
         w.writeheader()
         for r in rows:
             w.writerow({**r, "stalls": "; ".join(f"{s}={v:.2f}" for s, v in r["stalls"])})
@@ -246,7 +308,14 @@ def main() -> int:
             flops = 2.0 * m * n * k
         if flops > 0 and dram > 0:
             points.append((r["label"], flops / dram, flops / r["time_ns"]))
-    (docs / "roofline.svg").write_text(roofline_svg(points, peak_bw, peak_flops), encoding="utf-8", newline="\n")
+    # The roof of each tensor path used: its peak ops per SM per clock (from
+    # Nsight Compute) x SMs x the profiling clock.
+    tensor_roofs: dict[str, float] = {}
+    for r in rows:
+        if r["tensor_path"] and r.get("tensor_peak_per_sm_clock", 0) > 0:
+            tensor_roofs[r["tensor_path"]] = r["tensor_peak_per_sm_clock"] * sms * sm_ghz
+    (docs / "roofline.svg").write_text(roofline_svg(points, peak_bw, peak_flops, tensor_roofs), encoding="utf-8",
+                                       newline="\n")
     print(f"wrote {docs}/summary.md, metrics.csv, roofline.svg ({len(rows)} workloads)")
     return 0
 

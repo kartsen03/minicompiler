@@ -2,8 +2,10 @@
 # Runs the GPU benchmarks and records them under results/gpu/:
 #   elementwise.json    the GELU chain as one kernel per op vs one fused
 #                       kernel, with bandwidth against the GPU's peak
-#   matmul.json         the naive, tiled and register-tiled matmul kernels
-#                       against cuBLAS, in GFLOP/s and percent of peak FP32
+#   matmul.json         every FP32 matmul kernel against cuBLAS, in GFLOP/s
+#                       and percent of peak FP32
+#   tensor_core.json    the TF32, BF16 and FP16 tensor-core kernels against
+#                       cuBLAS with the same input format, and against FP32
 #   torch_compare.json  minicompiler's CUDA backend against PyTorch eager and
 #                       torch.compile on the same GPU and the same stream
 # Needs a build with the CUDA backend (BUILD_DIR, default build) and, for the
@@ -51,6 +53,7 @@ for run in $(seq 1 "$RUNS"); do
     echo "=== run $run of $RUNS"
     "$BUILD_DIR/bench/bench_cuda" --suite elementwise --out "$RAW/elementwise_$run.json"
     "$BUILD_DIR/bench/bench_cuda" --suite matmul --out "$RAW/matmul_$run.json"
+    "$BUILD_DIR/bench/bench_cuda" --suite tensor_core --out "$RAW/tensor_core_$run.json"
     if [ "$with_torch" = 1 ]; then
         "$PYTHON" bench/torch_compare.py --device cuda --capi "$BUILD_DIR/bench/libminicompiler_capi.so" \
             --out "$RAW/torch_compare_$run.json"
@@ -59,6 +62,7 @@ done
 
 "$PYTHON" scripts/aggregate_results.py gpu_elementwise results/gpu/elementwise.json "$RAW"/elementwise_*.json
 "$PYTHON" scripts/aggregate_results.py gpu_matmul results/gpu/matmul.json "$RAW"/matmul_*.json
+"$PYTHON" scripts/aggregate_results.py gpu_tensor_core results/gpu/tensor_core.json "$RAW"/tensor_core_*.json
 if [ "$with_torch" = 1 ]; then
     "$PYTHON" scripts/aggregate_results.py torch results/gpu/torch_compare.json "$RAW"/torch_compare_*.json
 fi
