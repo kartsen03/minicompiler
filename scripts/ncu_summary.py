@@ -291,8 +291,7 @@ def main() -> int:
               "smem_ld_wavefronts", "l1_hit", "l2_hit", "sm_hz", "tensor_path", "tensor_flops", "tensor_pct",
               "tensor_peak_per_sm_clock"]
     with open(docs / "metrics.csv", "w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=fields + ["stalls"], extrasaction="ignore", lineterminator="
-")
+        w = csv.DictWriter(f, fieldnames=fields + ["stalls"], extrasaction="ignore", lineterminator="\n")
         w.writeheader()
         for r in rows:
             w.writerow({**r, "stalls": "; ".join(f"{s}={v:.2f}" for s, v in r["stalls"])})
