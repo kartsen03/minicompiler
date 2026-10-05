@@ -82,8 +82,11 @@ constexpr int kArch = 0;
 // A and a BK x 128 tile of B in shared memory, rounded to the input precision
 // once there rather than at every fragment load, and double-buffered as in
 // the SIMT kernel: the next tile's float4 global loads are issued before the
-// current tile's mma and stored after them. Rows are padded by 16 bytes, the
-// usual remedy for bank conflicts in fragment loads. Whole accumulator tiles
+// current tile's mma and stored after them. Rows are padded against bank
+// conflicts in the fragment loads: A's by 16 bytes, B's by 8 elements, so
+// that B's rows start 8 banks apart even for TF32's 4-byte elements (padded
+// by 4 floats, rows 4 banks apart overlapped, and Nsight Compute counted 25%
+// of shared-load wavefronts conflicted). Whole accumulator tiles
 // are stored straight to C when its rows are 32-byte aligned; edge tiles, or
 // all of them otherwise, leave through a per-warp 16x16 scratch tile with
 // bounds checks, so C needs no alignment. Split-K as in the SIMT kernel: block z of
@@ -100,8 +103,9 @@ matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, flo
 		constexpr int kK = P::kK;
 		constexpr int BK = 2 * kK;
 		constexpr int kPad = 16 / static_cast<int>(sizeof(S));
+		constexpr int kPadB = 8;
 		__shared__ __align__(32) S as[2][kTcBM][BK + kPad];
-		__shared__ __align__(32) S bs[2][BK][kTcBN + kPad];
+		__shared__ __align__(32) S bs[2][BK][kTcBN + kPadB];
 		__shared__ __align__(32) float scratch[kTcWarps][16][16];
 
 		const int warp = threadIdx.x / 32, lane = threadIdx.x % 32;
@@ -169,7 +173,7 @@ matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, flo
 #pragma unroll
 				for (int i=0; i<4; ++i) wmma::load_matrix_sync(af[i], &as[cur][warp_row + i * 16][kk], BK + kPad);
 #pragma unroll
-				for (int j=0; j<2; ++j) wmma::load_matrix_sync(bf[j], &bs[cur][kk][warp_col + j * 16], kTcBN + kPad);
+				for (int j=0; j<2; ++j) wmma::load_matrix_sync(bf[j], &bs[cur][kk][warp_col + j * 16], kTcBN + kPadB);
 #pragma unroll
 				for (int i=0; i<4; ++i) {
 #pragma unroll
