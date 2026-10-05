@@ -1,1 +1,3788 @@
-{"benchmark": "FP32 matmul C[m,n] = A[m,k] B[k,n] (row-major): naive, shared-memory tiled and register-tiled kernels against cuBLAS", "method": "CUDA events around each kernel on one stream; 3 warmup runs per variant, then interleaved rounds (rotating order); time = median over rounds; GFLOP/s = 2mnk / time; ratios are medians over rounds of per-round ratios. Each kernel's result is checked on 1000 sampled elements against a float64 dot product within the FP32 error bound. cuBLAS runs in CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores)", "environment": {"commit": "83cc154", "cpu": "12th Gen Intel(R) Core(TM) i7-12700H", "hardware_threads": 20, "os": "Ubuntu 24.04.4 LTS, kernel 6.6.114.1-microsoft-standard-WSL2", "compiler": "gcc 13.3.0", "eigen": "3.4.0", "build_flags": "Release, march_native=ON", "threads": "1 (Eigen without OpenMP)", "host_power_plan": "Turbo"}, "peak_fp32_gflops": {"at_max_sm_clock": 16128, "max_sm_clock_mhz": 2100, "at_cuda_reported_clock": 10944, "cuda_reported_clock_mhz": 1425, "formula": "2 x SMs x FP32 lanes per SM x clock"}, "results": [{"shape": "512^3", "m": 512, "k": 512, "n": 512, "sm_clock_mhz_median": 1980, "kernels": [{"kernel": "naive", "timing": {"warmup": 3, "reps": 1991, "median_ms": 0.311296, "min_ms": 0.297984, "p10_ms": 0.3008, "p90_ms": 0.361472, "mean_ms": 0.320736}, "gflops": 862.316, "percent_of_peak_at_max_clock": 5.3467, "percent_of_peak_at_measured_clock": 5.67074, "percent_of_cublas": 25.0027, "speedup_over_naive": 1}, {"kernel": "tiled", "timing": {"warmup": 3, "reps": 1991, "median_ms": 0.256, "min_ms": 0.243712, "p10_ms": 0.246784, "p90_ms": 0.300032, "mean_ms": 0.264118}, "gflops": 1048.58, "percent_of_peak_at_max_clock": 6.50159, "percent_of_peak_at_measured_clock": 6.89562, "percent_of_cublas": 30.2638, "speedup_over_naive": 1.21912}, {"kernel": "register_tiled", "timing": {"warmup": 3, "reps": 1991, "median_ms": 0.129024, "min_ms": 0.120832, "p10_ms": 0.124032, "p90_ms": 0.156672, "mean_ms": 0.134993}, "gflops": 2080.51, "percent_of_peak_at_max_clock": 12.9, "percent_of_peak_at_measured_clock": 13.6818, "percent_of_cublas": 59.2637, "speedup_over_naive": 2.42063}, {"kernel": "cublas", "timing": {"warmup": 3, "reps": 1991, "median_ms": 0.080544, "min_ms": 0.047936, "p10_ms": 0.055296, "p90_ms": 0.125952, "mean_ms": 0.0881186}, "gflops": 3332.78, "percent_of_peak_at_max_clock": 20.6646, "percent_of_peak_at_measured_clock": 21.917, "percent_of_cublas": 100, "speedup_over_naive": 3.99957}]}, {"shape": "1024^3", "m": 1024, "k": 1024, "n": 1024, "sm_clock_mhz_median": 1942, "kernels": [{"kernel": "naive", "timing": {"warmup": 3, "reps": 375, "median_ms": 2.38797, "min_ms": 2.31395, "p10_ms": 2.34939, "p90_ms": 2.4288, "mean_ms": 2.39679}, "gflops": 899.293, "percent_of_peak_at_max_clock": 5.57598, "percent_of_peak_at_measured_clock": 6.02963, "percent_of_cublas": 14.5953, "speedup_over_naive": 1}, {"kernel": "tiled", "timing": {"warmup": 3, "reps": 375, "median_ms": 2.10022, "min_ms": 2.03571, "p10_ms": 2.06818, "p90_ms": 2.13405, "mean_ms": 2.11171}, "gflops": 1022.5, "percent_of_peak_at_max_clock": 6.33992, "percent_of_peak_at_measured_clock": 6.85573, "percent_of_cublas": 16.6199, "speedup_over_naive": 1.13743}, {"kernel": "register_tiled", "timing": {"warmup": 3, "reps": 375, "median_ms": 0.62464, "min_ms": 0.605024, "p10_ms": 0.614381, "p90_ms": 0.63959, "mean_ms": 0.629744}, "gflops": 3437.95, "percent_of_peak_at_max_clock": 21.3167, "percent_of_peak_at_measured_clock": 23.051, "percent_of_cublas": 55.7596, "speedup_over_naive": 3.82518}, {"kernel": "cublas", "timing": {"warmup": 3, "reps": 375, "median_ms": 0.349088, "min_ms": 0.2784, "p10_ms": 0.305152, "p90_ms": 0.449101, "mean_ms": 0.367164}, "gflops": 6151.7, "percent_of_peak_at_max_clock": 38.143, "percent_of_peak_at_measured_clock": 41.2463, "percent_of_cublas": 100, "speedup_over_naive": 6.85152}]}, {"shape": "2048^3", "m": 2048, "k": 2048, "n": 2048, "sm_clock_mhz_median": 1800, "kernels": [{"kernel": "naive", "timing": {"warmup": 3, "reps": 46, "median_ms": 20.2783, "min_ms": 19.1181, "p10_ms": 19.4927, "p90_ms": 21.5173, "mean_ms": 20.4565}, "gflops": 847.206, "percent_of_peak_at_max_clock": 5.25301, "percent_of_peak_at_measured_clock": 6.12851, "percent_of_cublas": 10.6366, "speedup_over_naive": 1}, {"kernel": "tiled", "timing": {"warmup": 3, "reps": 46, "median_ms": 17.4106, "min_ms": 16.855, "p10_ms": 17.0255, "p90_ms": 18.5395, "mean_ms": 17.6467}, "gflops": 986.75, "percent_of_peak_at_max_clock": 6.11824, "percent_of_peak_at_measured_clock": 7.13795, "percent_of_cublas": 12.2358, "speedup_over_naive": 1.16344}, {"kernel": "register_tiled", "timing": {"warmup": 3, "reps": 46, "median_ms": 3.55381, "min_ms": 3.3024, "p10_ms": 3.44318, "p90_ms": 3.78573, "mean_ms": 3.58719}, "gflops": 4834.21, "percent_of_peak_at_max_clock": 29.974, "percent_of_peak_at_measured_clock": 34.9697, "percent_of_cublas": 59.7034, "speedup_over_naive": 5.65563}, {"kernel": "cublas", "timing": {"warmup": 3, "reps": 46, "median_ms": 2.13811, "min_ms": 2.03571, "p10_ms": 2.07411, "p90_ms": 2.31821, "mean_ms": 2.17729}, "gflops": 8035.06, "percent_of_peak_at_max_clock": 49.8206, "percent_of_peak_at_measured_clock": 58.124, "percent_of_cublas": 100, "speedup_over_naive": 9.40148}]}, {"shape": "4096^3", "m": 4096, "k": 4096, "n": 4096, "sm_clock_mhz_median": 1657, "kernels": [{"kernel": "naive", "timing": {"warmup": 3, "reps": 10, "median_ms": 188.531, "min_ms": 180.344, "p10_ms": 180.668, "p90_ms": 196.949, "mean_ms": 188.422}, "gflops": 728.999, "percent_of_peak_at_max_clock": 4.52008, "percent_of_peak_at_measured_clock": 5.72853, "percent_of_cublas": 9.26888, "speedup_over_naive": 1}, {"kernel": "tiled", "timing": {"warmup": 3, "reps": 10, "median_ms": 143.761, "min_ms": 138.727, "p10_ms": 140.508, "p90_ms": 145.806, "mean_ms": 143.376}, "gflops": 956.021, "percent_of_peak_at_max_clock": 5.92771, "percent_of_peak_at_measured_clock": 7.51249, "percent_of_cublas": 12.092, "speedup_over_naive": 1.31094}, {"kernel": "register_tiled", "timing": {"warmup": 3, "reps": 10, "median_ms": 27.2507, "min_ms": 25.599, "p10_ms": 26.2089, "p90_ms": 29.2076, "mean_ms": 27.5304}, "gflops": 5043.5, "percent_of_peak_at_max_clock": 31.2717, "percent_of_peak_at_measured_clock": 39.6322, "percent_of_cublas": 62.8788, "speedup_over_naive": 6.85585}, {"kernel": "cublas", "timing": {"warmup": 3, "reps": 10, "median_ms": 17.1836, "min_ms": 15.9835, "p10_ms": 16.1412, "p90_ms": 18.8913, "mean_ms": 17.5729}, "gflops": 7998.24, "percent_of_peak_at_max_clock": 49.5923, "percent_of_peak_at_measured_clock": 62.8508, "percent_of_cublas": 100, "speedup_over_naive": 10.7888}]}, {"shape": "1000^3 (not a tile multiple)", "m": 1000, "k": 1000, "n": 1000, "sm_clock_mhz_median": 1860, "kernels": [{"kernel": "naive", "timing": {"warmup": 3, "reps": 371, "median_ms": 2.31424, "min_ms": 2.17373, "p10_ms": 2.25075, "p90_ms": 3.42323, "mean_ms": 2.6292}, "gflops": 864.215, "percent_of_peak_at_max_clock": 5.35847, "percent_of_peak_at_measured_clock": 6.04989, "percent_of_cublas": 14.3363, "speedup_over_naive": 1}, {"kernel": "tiled", "timing": {"warmup": 3, "reps": 371, "median_ms": 2.18931, "min_ms": 2.05811, "p10_ms": 2.12582, "p90_ms": 3.29296, "mean_ms": 2.54572}, "gflops": 913.529, "percent_of_peak_at_max_clock": 5.66424, "percent_of_peak_at_measured_clock": 6.39511, "percent_of_cublas": 15.342, "speedup_over_naive": 1.06151}, {"kernel": "register_tiled", "timing": {"warmup": 3, "reps": 371, "median_ms": 0.631808, "min_ms": 0.597728, "p10_ms": 0.617472, "p90_ms": 0.779264, "mean_ms": 0.706937}, "gflops": 3165.52, "percent_of_peak_at_max_clock": 19.6275, "percent_of_peak_at_measured_clock": 22.16, "percent_of_cublas": 53.9906, "speedup_over_naive": 3.66869}, {"kernel": "cublas", "timing": {"warmup": 3, "reps": 371, "median_ms": 0.351232, "min_ms": 0.266976, "p10_ms": 0.280544, "p90_ms": 0.504832, "mean_ms": 0.507185}, "gflops": 5694.24, "percent_of_peak_at_max_clock": 35.3066, "percent_of_peak_at_measured_clock": 39.8622, "percent_of_cublas": 100, "speedup_over_naive": 6.97531}]}, {"shape": "1023x1029x1031 (odd)", "m": 1023, "k": 1029, "n": 1031, "sm_clock_mhz_median": 1830, "kernels": [{"kernel": "naive", "timing": {"warmup": 3, "reps": 355, "median_ms": 2.6112, "min_ms": 2.43098, "p10_ms": 2.49344, "p90_ms": 4.2012, "mean_ms": 2.94273}, "gflops": 831.265, "percent_of_peak_at_max_clock": 5.15417, "percent_of_peak_at_measured_clock": 5.91462, "percent_of_cublas": 13.6097, "speedup_over_naive": 1}, {"kernel": "tiled", "timing": {"warmup": 3, "reps": 355, "median_ms": 2.38771, "min_ms": 2.24666, "p10_ms": 2.30091, "p90_ms": 3.99237, "mean_ms": 2.70252}, "gflops": 909.071, "percent_of_peak_at_max_clock": 5.6366, "percent_of_peak_at_measured_clock": 6.46823, "percent_of_cublas": 14.9872, "speedup_over_naive": 1.08683}, {"kernel": "register_tiled", "timing": {"warmup": 3, "reps": 355, "median_ms": 0.661472, "min_ms": 0.625664, "p10_ms": 0.641024, "p90_ms": 0.862413, "mean_ms": 0.740122}, "gflops": 3281.47, "percent_of_peak_at_max_clock": 20.3464, "percent_of_peak_at_measured_clock": 23.3483, "percent_of_cublas": 55.055, "speedup_over_naive": 3.90016}, {"kernel": "cublas", "timing": {"warmup": 3, "reps": 355, "median_ms": 0.374784, "min_ms": 0.304832, "p10_ms": 0.315392, "p90_ms": 0.520806, "mean_ms": 0.40774}, "gflops": 5791.6, "percent_of_peak_at_max_clock": 35.9102, "percent_of_peak_at_measured_clock": 41.2085, "percent_of_cublas": 100, "speedup_over_naive": 7.3477}]}, {"shape": "128x512x2048 (MLP layer 1, B=128)", "m": 128, "k": 512, "n": 2048, "sm_clock_mhz_median": 1447, "kernels": [{"kernel": "naive", "timing": {"warmup": 3, "reps": 2000, "median_ms": 0.421328, "min_ms": 0.306176, "p10_ms": 0.311296, "p90_ms": 0.502784, "mean_ms": 0.439773}, "gflops": 637.118, "percent_of_peak_at_max_clock": 3.95038, "percent_of_peak_at_measured_clock": 5.7331, "percent_of_cublas": 28.7433, "speedup_over_naive": 1}, {"kernel": "tiled", "timing": {"warmup": 3, "reps": 2000, "median_ms": 0.356352, "min_ms": 0.265888, "p10_ms": 0.270336, "p90_ms": 0.420864, "mean_ms": 0.352391}, "gflops": 753.287, "percent_of_peak_at_max_clock": 4.67068, "percent_of_peak_at_measured_clock": 6.77846, "percent_of_cublas": 33.9623, "speedup_over_naive": 1.17473}, {"kernel": "register_tiled", "timing": {"warmup": 3, "reps": 2000, "median_ms": 0.180016, "min_ms": 0.132096, "p10_ms": 0.136128, "p90_ms": 0.210723, "mean_ms": 0.17771}, "gflops": 1491.18, "percent_of_peak_at_max_clock": 9.24588, "percent_of_peak_at_measured_clock": 13.4183, "percent_of_cublas": 67.0052, "speedup_over_naive": 2.33606}, {"kernel": "cublas", "timing": {"warmup": 3, "reps": 2000, "median_ms": 0.114672, "min_ms": 0.064448, "p10_ms": 0.077824, "p90_ms": 0.188518, "mean_ms": 0.13103}, "gflops": 2340.9, "percent_of_peak_at_max_clock": 14.5145, "percent_of_peak_at_measured_clock": 21.0646, "percent_of_cublas": 100, "speedup_over_naive": 3.47907}]}, {"shape": "512x2048x512 (MLP layer 2, B=512)", "m": 512, "k": 2048, "n": 512, "sm_clock_mhz_median": 1987, "kernels": [{"kernel": "naive", "timing": {"warmup": 3, "reps": 415, "median_ms": 1.22061, "min_ms": 1.19398, "p10_ms": 1.20627, "p90_ms": 2.01114, "mean_ms": 1.41748}, "gflops": 879.678, "percent_of_peak_at_max_clock": 5.45435, "percent_of_peak_at_measured_clock": 5.76454, "percent_of_cublas": 15.3566, "speedup_over_naive": 1}, {"kernel": "tiled", "timing": {"warmup": 3, "reps": 415, "median_ms": 1.05677, "min_ms": 1.03117, "p10_ms": 1.0432, "p90_ms": 1.70144, "mean_ms": 1.23753}, "gflops": 1016.06, "percent_of_peak_at_max_clock": 6.29999, "percent_of_peak_at_measured_clock": 6.65827, "percent_of_cublas": 17.7661, "speedup_over_naive": 1.15689}, {"kernel": "register_tiled", "timing": {"warmup": 3, "reps": 415, "median_ms": 0.5376, "min_ms": 0.528384, "p10_ms": 0.53248, "p90_ms": 0.821453, "mean_ms": 0.623055}, "gflops": 1997.29, "percent_of_peak_at_max_clock": 12.384, "percent_of_peak_at_measured_clock": 13.0882, "percent_of_cublas": 35.241, "speedup_over_naive": 2.27478}, {"kernel": "cublas", "timing": {"warmup": 3, "reps": 415, "median_ms": 0.19456, "min_ms": 0.157696, "p10_ms": 0.164864, "p90_ms": 0.311872, "mean_ms": 0.223416}, "gflops": 5518.82, "percent_of_peak_at_max_clock": 34.2189, "percent_of_peak_at_measured_clock": 36.1649, "percent_of_cublas": 100, "speedup_over_naive": 6.51187}]}], "device": {"name": "NVIDIA GeForce RTX 3060 Laptop GPU", "compute_capability": "8.6", "sm_count": 30, "fp32_lanes_per_sm": 128, "sm_clock_mhz_cuda_attribute": 1425, "max_sm_clock_mhz_nvml": 2100, "mem_clock_mhz": 7001, "bus_width_bits": 192, "peak_bandwidth_gbs": 336.048, "cuda_runtime": 13010, "cuda_driver": 13010, "sm_clock_mhz_during_run": {"min": 750, "median": 1927, "max": 2010}}}
+{
+  "benchmark": "FP32 matmul C[m,n] = A[m,k] B[k,n] (row-major): naive, shared-memory tiled and register-tiled (128x128 and 64x64 tiles) kernels against cuBLAS",
+  "method": "CUDA events around each kernel on one stream; 3 warmup runs per variant and warm-up rounds until the GPU has been busy for warmup_seconds, then interleaved rounds (rotating order); time = median over rounds; GFLOP/s = 2mnk / time; ratios are medians over rounds of per-round ratios. Each kernel's result is checked on 1000 sampled elements against a float64 dot product within the FP32 error bound. cuBLAS runs in CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores). register_tiled_picks is the tile size the backend's register_tiled kernel uses for the shape: 64x64 when the output's 128x128 tiles would keep at most three quarters of the SMs busy",
+  "warmup_seconds": 1,
+  "seconds_per_config": 2,
+  "environment": {
+    "commit": "3b6c819",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "hardware_threads": 20,
+    "os": "Ubuntu 24.04.4 LTS, kernel 6.6.114.1-microsoft-standard-WSL2",
+    "compiler": "gcc 13.3.0",
+    "eigen": "3.4.0",
+    "build_flags": "Release, march_native=ON",
+    "threads": "1 (Eigen without OpenMP)",
+    "host_power_plan": "Turbo"
+  },
+  "peak_fp32_gflops": {
+    "at_max_sm_clock": 16128,
+    "max_sm_clock_mhz": 2100,
+    "at_cuda_reported_clock": 10944,
+    "cuda_reported_clock_mhz": 1425,
+    "formula": "2 x SMs x FP32 lanes per SM x clock"
+  },
+  "device": {
+    "name": "NVIDIA GeForce RTX 3060 Laptop GPU",
+    "compute_capability": "8.6",
+    "sm_count": 30,
+    "fp32_lanes_per_sm": 128,
+    "sm_clock_mhz_cuda_attribute": 1425,
+    "max_sm_clock_mhz_nvml": 2100,
+    "mem_clock_mhz": 7001,
+    "bus_width_bits": 192,
+    "peak_bandwidth_gbs": 336.048,
+    "cuda_runtime": 13010,
+    "cuda_driver": 13010,
+    "sm_clock_mhz_during_run": {
+      "min": 900,
+      "median_of_run_medians": 1770,
+      "max": 1987
+    }
+  },
+  "runs": 3,
+  "commits": [
+    "3b6c819"
+  ],
+  "results": [
+    {
+      "shape": "512^3",
+      "m": 512,
+      "k": 512,
+      "n": 512,
+      "tiles_128x128": 16,
+      "register_tiled_picks": "register_tiled_64",
+      "sm_clock_mhz_median": {
+        "median": 1867,
+        "min": 1837,
+        "max": 1987,
+        "runs": [
+          1987,
+          1837,
+          1867
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_64",
+        "register_tiled_64",
+        "register_tiled_64"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 0.324608,
+            "min": 0.306176,
+            "max": 0.32768,
+            "runs": [
+              0.306176,
+              0.32768,
+              0.324608
+            ]
+          },
+          "gflops": {
+            "median": 826.953,
+            "min": 819.2,
+            "max": 876.736,
+            "runs": [
+              876.736,
+              819.2,
+              826.953
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 5.12743,
+            "min": 5.07937,
+            "max": 5.43611,
+            "runs": [
+              5.43611,
+              5.07937,
+              5.12743
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 5.76733,
+            "min": 5.74526,
+            "max": 5.80657,
+            "runs": [
+              5.74526,
+              5.80657,
+              5.76733
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 25.0122,
+            "min": 23.4104,
+            "max": 27.2727,
+            "runs": [
+              27.2727,
+              25.0122,
+              23.4104
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 0.264192,
+            "min": 0.247808,
+            "max": 0.26624,
+            "runs": [
+              0.247808,
+              0.26624,
+              0.264192
+            ]
+          },
+          "gflops": {
+            "median": 1016.06,
+            "min": 1008.25,
+            "max": 1083.24,
+            "runs": [
+              1083.24,
+              1008.25,
+              1016.06
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 6.29999,
+            "min": 6.25153,
+            "max": 6.71652,
+            "runs": [
+              6.71652,
+              6.25153,
+              6.29999
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 7.09848,
+            "min": 7.08622,
+            "max": 7.14655,
+            "runs": [
+              7.09848,
+              7.14655,
+              7.08622
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 30.7692,
+            "min": 28.7472,
+            "max": 33.4772,
+            "runs": [
+              33.4772,
+              30.7692,
+              28.7472
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.23552,
+            "min": 1.23437,
+            "max": 1.23705,
+            "runs": [
+              1.23705,
+              1.23552,
+              1.23437
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.130048,
+            "min": 0.121664,
+            "max": 0.130048,
+            "runs": [
+              0.121664,
+              0.130048,
+              0.130048
+            ]
+          },
+          "gflops": {
+            "median": 2064.13,
+            "min": 2064.13,
+            "max": 2206.37,
+            "runs": [
+              2206.37,
+              2064.13,
+              2064.13
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 12.7984,
+            "min": 12.7984,
+            "max": 13.6804,
+            "runs": [
+              13.6804,
+              12.7984,
+              12.7984
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 14.4583,
+            "min": 14.3956,
+            "max": 14.6307,
+            "runs": [
+              14.4583,
+              14.6307,
+              14.3956
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 62.3803,
+            "min": 58.1967,
+            "max": 67.5643,
+            "runs": [
+              67.5643,
+              62.3803,
+              58.1967
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 2.52542,
+            "min": 2.51587,
+            "max": 2.52634,
+            "runs": [
+              2.52542,
+              2.52634,
+              2.51587
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.119808,
+            "min": 0.11264,
+            "max": 0.120832,
+            "runs": [
+              0.11264,
+              0.120832,
+              0.119808
+            ]
+          },
+          "gflops": {
+            "median": 2240.55,
+            "min": 2221.56,
+            "max": 2383.13,
+            "runs": [
+              2383.13,
+              2221.56,
+              2240.55
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 13.8923,
+            "min": 13.7745,
+            "max": 14.7763,
+            "runs": [
+              14.7763,
+              13.7745,
+              13.8923
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 15.626,
+            "min": 15.6167,
+            "max": 15.7466,
+            "runs": [
+              15.6167,
+              15.7466,
+              15.626
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 67.4898,
+            "min": 63.3152,
+            "max": 73.3202,
+            "runs": [
+              73.3202,
+              67.4898,
+              63.3152
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 2.71852,
+            "min": 2.71798,
+            "max": 2.71899,
+            "runs": [
+              2.71899,
+              2.71852,
+              2.71798
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.08192,
+            "min": 0.0768,
+            "max": 0.083968,
+            "runs": [
+              0.083968,
+              0.08192,
+              0.0768
+            ]
+          },
+          "gflops": {
+            "median": 3276.8,
+            "min": 3196.88,
+            "max": 3495.25,
+            "runs": [
+              3196.88,
+              3276.8,
+              3495.25
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 20.3175,
+            "min": 19.8219,
+            "max": 21.672,
+            "runs": [
+              19.8219,
+              20.3175,
+              21.672
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 23.2263,
+            "min": 20.9492,
+            "max": 24.3766,
+            "runs": [
+              20.9492,
+              23.2263,
+              24.3766
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.99804,
+            "min": 3.66667,
+            "max": 4.2716,
+            "runs": [
+              3.66667,
+              3.99804,
+              4.2716
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "640^3",
+      "m": 640,
+      "k": 640,
+      "n": 640,
+      "tiles_128x128": 25,
+      "register_tiled_picks": "register_tiled_128",
+      "sm_clock_mhz_median": {
+        "median": 1747,
+        "min": 1747,
+        "max": 1942,
+        "runs": [
+          1942,
+          1747,
+          1747
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_128",
+        "register_tiled_128",
+        "register_tiled_128"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 0.655232,
+            "min": 0.591936,
+            "max": 0.65712,
+            "runs": [
+              0.591936,
+              0.655232,
+              0.65712
+            ]
+          },
+          "gflops": {
+            "median": 800.156,
+            "min": 797.857,
+            "max": 885.717,
+            "runs": [
+              885.717,
+              800.156,
+              797.857
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.96129,
+            "min": 4.94703,
+            "max": 5.4918,
+            "runs": [
+              5.4918,
+              4.96129,
+              4.94703
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 5.94663,
+            "min": 5.93861,
+            "max": 5.96377,
+            "runs": [
+              5.93861,
+              5.96377,
+              5.94663
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 18.7228,
+            "min": 18.5693,
+            "max": 22.6481,
+            "runs": [
+              22.6481,
+              18.5693,
+              18.7228
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 0.548768,
+            "min": 0.497664,
+            "max": 0.551712,
+            "runs": [
+              0.497664,
+              0.548768,
+              0.551712
+            ]
+          },
+          "gflops": {
+            "median": 955.391,
+            "min": 950.293,
+            "max": 1053.5,
+            "runs": [
+              1053.5,
+              955.391,
+              950.293
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 5.9238,
+            "min": 5.89219,
+            "max": 6.53211,
+            "runs": [
+              6.53211,
+              5.9238,
+              5.89219
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 7.08277,
+            "min": 7.06355,
+            "max": 7.12077,
+            "runs": [
+              7.06355,
+              7.12077,
+              7.08277
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 22.3345,
+            "min": 22.1609,
+            "max": 26.9717,
+            "runs": [
+              26.9717,
+              22.1609,
+              22.3345
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.19391,
+            "min": 1.18919,
+            "max": 1.19549,
+            "runs": [
+              1.18919,
+              1.19549,
+              1.19391
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.177152,
+            "min": 0.161536,
+            "max": 0.178176,
+            "runs": [
+              0.161536,
+              0.177152,
+              0.178176
+            ]
+          },
+          "gflops": {
+            "median": 2959.54,
+            "min": 2942.53,
+            "max": 3245.64,
+            "runs": [
+              3245.64,
+              2959.54,
+              2942.53
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 18.3503,
+            "min": 18.2448,
+            "max": 20.1243,
+            "runs": [
+              20.1243,
+              18.3503,
+              18.2448
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 21.9314,
+            "min": 21.7616,
+            "max": 22.0582,
+            "runs": [
+              21.7616,
+              22.0582,
+              21.9314
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 69.0896,
+            "min": 68.2081,
+            "max": 82.4548,
+            "runs": [
+              82.4548,
+              68.2081,
+              69.0896
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.69322,
+            "min": 3.67516,
+            "max": 3.69681,
+            "runs": [
+              3.67516,
+              3.69681,
+              3.69322
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.18944,
+            "min": 0.175072,
+            "max": 0.191488,
+            "runs": [
+              0.175072,
+              0.18944,
+              0.191488
+            ]
+          },
+          "gflops": {
+            "median": 2767.57,
+            "min": 2737.97,
+            "max": 2994.7,
+            "runs": [
+              2994.7,
+              2767.57,
+              2737.97
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 17.16,
+            "min": 16.9765,
+            "max": 18.5683,
+            "runs": [
+              18.5683,
+              17.16,
+              16.9765
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 20.4068,
+            "min": 20.079,
+            "max": 20.6274,
+            "runs": [
+              20.079,
+              20.6274,
+              20.4068
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 64.0305,
+            "min": 63.6018,
+            "max": 76.1086,
+            "runs": [
+              76.1086,
+              63.6018,
+              64.0305
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.45399,
+            "min": 3.39053,
+            "max": 3.46486,
+            "runs": [
+              3.39053,
+              3.46486,
+              3.45399
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.123776,
+            "min": 0.121856,
+            "max": 0.136192,
+            "runs": [
+              0.136192,
+              0.121856,
+              0.123776
+            ]
+          },
+          "gflops": {
+            "median": 4235.78,
+            "min": 3849.62,
+            "max": 4302.52,
+            "runs": [
+              3849.62,
+              4302.52,
+              4235.78
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 26.2635,
+            "min": 23.8692,
+            "max": 26.6773,
+            "runs": [
+              23.8692,
+              26.6773,
+              26.2635
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 31.5703,
+            "min": 25.8112,
+            "max": 32.0678,
+            "runs": [
+              25.8112,
+              32.0678,
+              31.5703
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 5.34109,
+            "min": 4.41538,
+            "max": 5.38525,
+            "runs": [
+              4.41538,
+              5.38525,
+              5.34109
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "1024^3",
+      "m": 1024,
+      "k": 1024,
+      "n": 1024,
+      "tiles_128x128": 64,
+      "register_tiled_picks": "register_tiled_128",
+      "sm_clock_mhz_median": {
+        "median": 1522,
+        "min": 1492,
+        "max": 1762,
+        "runs": [
+          1762,
+          1522,
+          1492
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_128",
+        "register_tiled_128",
+        "register_tiled_128"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 3.02486,
+            "min": 2.61914,
+            "max": 3.08677,
+            "runs": [
+              2.61914,
+              3.02486,
+              3.08677
+            ]
+          },
+          "gflops": {
+            "median": 709.944,
+            "min": 695.706,
+            "max": 819.921,
+            "runs": [
+              819.921,
+              709.944,
+              695.706
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.40193,
+            "min": 4.31365,
+            "max": 5.08383,
+            "runs": [
+              5.08383,
+              4.40193,
+              4.31365
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.0715,
+            "min": 6.05905,
+            "max": 6.07363,
+            "runs": [
+              6.05905,
+              6.07363,
+              6.0715
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 12.2382,
+            "min": 11.1888,
+            "max": 12.2742,
+            "runs": [
+              12.2742,
+              12.2382,
+              11.1888
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 2.60811,
+            "min": 2.28864,
+            "max": 2.65011,
+            "runs": [
+              2.28864,
+              2.60811,
+              2.65011
+            ]
+          },
+          "gflops": {
+            "median": 823.386,
+            "min": 810.337,
+            "max": 938.323,
+            "runs": [
+              938.323,
+              823.386,
+              810.337
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 5.10532,
+            "min": 5.02441,
+            "max": 5.81798,
+            "runs": [
+              5.81798,
+              5.10532,
+              5.02441
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 7.04414,
+            "min": 6.93402,
+            "max": 7.07189,
+            "runs": [
+              6.93402,
+              7.04414,
+              7.07189
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 14.0965,
+            "min": 13.0486,
+            "max": 14.2693,
+            "runs": [
+              14.0965,
+              14.2693,
+              13.0486
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.16263,
+            "min": 1.14619,
+            "max": 1.16513,
+            "runs": [
+              1.14619,
+              1.16263,
+              1.16513
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.771072,
+            "min": 0.678912,
+            "max": 0.78336,
+            "runs": [
+              0.678912,
+              0.771072,
+              0.78336
+            ]
+          },
+          "gflops": {
+            "median": 2785.06,
+            "min": 2741.38,
+            "max": 3163.13,
+            "runs": [
+              3163.13,
+              2785.06,
+              2741.38
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 17.2685,
+            "min": 16.9976,
+            "max": 19.6126,
+            "runs": [
+              19.6126,
+              17.2685,
+              16.9976
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 23.8264,
+            "min": 23.3749,
+            "max": 23.9243,
+            "runs": [
+              23.3749,
+              23.8264,
+              23.9243
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 47.6262,
+            "min": 44.2156,
+            "max": 48.1037,
+            "runs": [
+              47.6262,
+              48.1037,
+              44.2156
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.93415,
+            "min": 3.87651,
+            "max": 3.9422,
+            "runs": [
+              3.87651,
+              3.93415,
+              3.9422
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.921536,
+            "min": 0.833504,
+            "max": 0.929648,
+            "runs": [
+              0.833504,
+              0.921536,
+              0.929648
+            ]
+          },
+          "gflops": {
+            "median": 2330.33,
+            "min": 2310,
+            "max": 2576.45,
+            "runs": [
+              2576.45,
+              2330.33,
+              2310
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 14.449,
+            "min": 14.3229,
+            "max": 15.975,
+            "runs": [
+              15.975,
+              14.449,
+              14.3229
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 19.9362,
+            "min": 19.0395,
+            "max": 20.1596,
+            "runs": [
+              19.0395,
+              19.9362,
+              20.1596
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 38.8404,
+            "min": 37.278,
+            "max": 40.2769,
+            "runs": [
+              38.8404,
+              40.2769,
+              37.278
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.29149,
+            "min": 3.16099,
+            "max": 3.32412,
+            "runs": [
+              3.16099,
+              3.29149,
+              3.32412
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.349184,
+            "min": 0.323584,
+            "max": 0.372224,
+            "runs": [
+              0.323584,
+              0.372224,
+              0.349184
+            ]
+          },
+          "gflops": {
+            "median": 6150.01,
+            "min": 5769.33,
+            "max": 6636.56,
+            "runs": [
+              6636.56,
+              5769.33,
+              6150.01
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 38.1325,
+            "min": 35.7721,
+            "max": 41.1493,
+            "runs": [
+              41.1493,
+              35.7721,
+              38.1325
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 49.3571,
+            "min": 49.0429,
+            "max": 53.6717,
+            "runs": [
+              49.0429,
+              49.3571,
+              53.6717
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 8.17114,
+            "min": 8.14718,
+            "max": 8.93749,
+            "runs": [
+              8.14718,
+              8.17114,
+              8.93749
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "2048^3",
+      "m": 2048,
+      "k": 2048,
+      "n": 2048,
+      "tiles_128x128": 256,
+      "register_tiled_picks": "register_tiled_128",
+      "sm_clock_mhz_median": {
+        "median": 1402,
+        "min": 1357,
+        "max": 1620,
+        "runs": [
+          1620,
+          1402,
+          1357
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_128",
+        "register_tiled_128",
+        "register_tiled_128"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 26.0895,
+            "min": 22.1798,
+            "max": 27.1462,
+            "runs": [
+              22.1798,
+              26.0895,
+              27.1462
+            ]
+          },
+          "gflops": {
+            "median": 658.498,
+            "min": 632.864,
+            "max": 774.571,
+            "runs": [
+              774.571,
+              658.498,
+              632.864
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.08295,
+            "min": 3.92401,
+            "max": 4.80265,
+            "runs": [
+              4.80265,
+              4.08295,
+              3.92401
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.11569,
+            "min": 6.07252,
+            "max": 6.22566,
+            "runs": [
+              6.22566,
+              6.11569,
+              6.07252
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 10.0935,
+            "min": 9.91255,
+            "max": 10.3811,
+            "runs": [
+              10.3811,
+              9.91255,
+              10.0935
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 22.4471,
+            "min": 19.1966,
+            "max": 22.8464,
+            "runs": [
+              19.1966,
+              22.4471,
+              22.8464
+            ]
+          },
+          "gflops": {
+            "median": 765.349,
+            "min": 751.974,
+            "max": 894.943,
+            "runs": [
+              894.943,
+              765.349,
+              751.974
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.74547,
+            "min": 4.66254,
+            "max": 5.549,
+            "runs": [
+              5.549,
+              4.74547,
+              4.66254
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 7.19315,
+            "min": 7.10805,
+            "max": 7.21542,
+            "runs": [
+              7.19315,
+              7.10805,
+              7.21542
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 11.7567,
+            "min": 11.5618,
+            "max": 12.055,
+            "runs": [
+              12.055,
+              11.5618,
+              11.7567
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.17228,
+            "min": 1.16724,
+            "max": 1.17892,
+            "runs": [
+              1.16724,
+              1.17228,
+              1.17892
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 4.58691,
+            "min": 3.94634,
+            "max": 4.8169,
+            "runs": [
+              3.94634,
+              4.58691,
+              4.8169
+            ]
+          },
+          "gflops": {
+            "median": 3745.41,
+            "min": 3566.59,
+            "max": 4353.37,
+            "runs": [
+              4353.37,
+              3745.41,
+              3566.59
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 23.223,
+            "min": 22.1142,
+            "max": 26.9926,
+            "runs": [
+              26.9926,
+              23.223,
+              22.1142
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 34.7849,
+            "min": 34.2225,
+            "max": 34.9905,
+            "runs": [
+              34.9905,
+              34.7849,
+              34.2225
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 58.0499,
+            "min": 58.0423,
+            "max": 58.5896,
+            "runs": [
+              58.5896,
+              58.0499,
+              58.0423
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 5.73717,
+            "min": 5.62304,
+            "max": 5.76738,
+            "runs": [
+              5.62304,
+              5.76738,
+              5.73717
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 6.47629,
+            "min": 5.61562,
+            "max": 6.6985,
+            "runs": [
+              5.61562,
+              6.47629,
+              6.6985
+            ]
+          },
+          "gflops": {
+            "median": 2652.73,
+            "min": 2564.74,
+            "max": 3059.3,
+            "runs": [
+              3059.3,
+              2652.73,
+              2564.74
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 16.448,
+            "min": 15.9024,
+            "max": 18.9689,
+            "runs": [
+              18.9689,
+              16.448,
+              15.9024
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 24.6094,
+            "min": 24.5893,
+            "max": 24.6368,
+            "runs": [
+              24.5893,
+              24.6368,
+              24.6094
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 41.0871,
+            "min": 40.8492,
+            "max": 41.4086,
+            "runs": [
+              41.4086,
+              40.8492,
+              41.0871
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 4.06388,
+            "min": 4.00916,
+            "max": 4.07344,
+            "runs": [
+              4.00916,
+              4.06388,
+              4.07344
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 2.59832,
+            "min": 2.32426,
+            "max": 2.752,
+            "runs": [
+              2.32426,
+              2.59832,
+              2.752
+            ]
+          },
+          "gflops": {
+            "median": 6611.91,
+            "min": 6242.69,
+            "max": 7391.56,
+            "runs": [
+              7391.56,
+              6611.91,
+              6242.69
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 40.9965,
+            "min": 38.7071,
+            "max": 45.8306,
+            "runs": [
+              45.8306,
+              40.9965,
+              38.7071
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 59.9005,
+            "min": 59.41,
+            "max": 61.407,
+            "runs": [
+              59.41,
+              61.407,
+              59.9005
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 9.90735,
+            "min": 9.63285,
+            "max": 10.0882,
+            "runs": [
+              9.63285,
+              10.0882,
+              9.90735
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "4096^3",
+      "m": 4096,
+      "k": 4096,
+      "n": 4096,
+      "tiles_128x128": 1024,
+      "register_tiled_picks": "register_tiled_128",
+      "sm_clock_mhz_median": {
+        "median": 1260,
+        "min": 1042,
+        "max": 1560,
+        "runs": [
+          1560,
+          1260,
+          1042
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_128",
+        "register_tiled_128",
+        "register_tiled_128"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 269.436,
+            "min": 204.584,
+            "max": 276.771,
+            "runs": [
+              204.584,
+              269.436,
+              276.771
+            ]
+          },
+          "gflops": {
+            "median": 510.098,
+            "min": 496.58,
+            "max": 671.796,
+            "runs": [
+              671.796,
+              510.098,
+              496.58
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 3.16281,
+            "min": 3.079,
+            "max": 4.1654,
+            "runs": [
+              4.1654,
+              3.16281,
+              3.079
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 5.60727,
+            "min": 5.27135,
+            "max": 6.20527,
+            "runs": [
+              5.60727,
+              5.27135,
+              6.20527
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 9.7658,
+            "min": 9.72745,
+            "max": 10.0472,
+            "runs": [
+              9.72745,
+              9.7658,
+              10.0472
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 182.817,
+            "min": 152.464,
+            "max": 186.141,
+            "runs": [
+              152.464,
+              186.141,
+              182.817
+            ]
+          },
+          "gflops": {
+            "median": 751.783,
+            "min": 738.359,
+            "max": 901.45,
+            "runs": [
+              901.45,
+              738.359,
+              751.783
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.66135,
+            "min": 4.57812,
+            "max": 5.58934,
+            "runs": [
+              5.58934,
+              4.57812,
+              4.66135
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 7.63019,
+            "min": 7.52412,
+            "max": 9.39428,
+            "runs": [
+              7.52412,
+              7.63019,
+              9.39428
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 13.7059,
+            "min": 12.8398,
+            "max": 14.109,
+            "runs": [
+              12.8398,
+              13.7059,
+              14.109
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.48501,
+            "min": 1.31942,
+            "max": 1.5105,
+            "runs": [
+              1.31942,
+              1.48501,
+              1.5105
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 32.7946,
+            "min": 29.2316,
+            "max": 34.26,
+            "runs": [
+              29.2316,
+              32.7946,
+              34.26
+            ]
+          },
+          "gflops": {
+            "median": 4190.9,
+            "min": 4011.65,
+            "max": 4701.72,
+            "runs": [
+              4701.72,
+              4190.9,
+              4011.65
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 25.9852,
+            "min": 24.8738,
+            "max": 29.1525,
+            "runs": [
+              29.1525,
+              25.9852,
+              24.8738
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 43.3087,
+            "min": 39.2438,
+            "max": 50.1296,
+            "runs": [
+              39.2438,
+              43.3087,
+              50.1296
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 71.9575,
+            "min": 67.5155,
+            "max": 74.3774,
+            "runs": [
+              67.5155,
+              71.9575,
+              74.3774
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 7.81862,
+            "min": 6.99134,
+            "max": 7.92521,
+            "runs": [
+              6.99134,
+              7.81862,
+              7.92521
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 56.5339,
+            "min": 46.8362,
+            "max": 56.8366,
+            "runs": [
+              46.8362,
+              56.5339,
+              56.8366
+            ]
+          },
+          "gflops": {
+            "median": 2431.09,
+            "min": 2418.14,
+            "max": 2934.46,
+            "runs": [
+              2934.46,
+              2431.09,
+              2418.14
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 15.0737,
+            "min": 14.9934,
+            "max": 18.1948,
+            "runs": [
+              18.1948,
+              15.0737,
+              14.9934
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 25.1228,
+            "min": 24.493,
+            "max": 30.2171,
+            "runs": [
+              24.493,
+              25.1228,
+              30.2171
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 42.0404,
+            "min": 41.1212,
+            "max": 45.1817,
+            "runs": [
+              41.1212,
+              42.0404,
+              45.1817
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 4.62247,
+            "min": 4.35343,
+            "max": 4.8452,
+            "runs": [
+              4.35343,
+              4.62247,
+              4.8452
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 23.6887,
+            "min": 19.4365,
+            "max": 25.5124,
+            "runs": [
+              19.4365,
+              23.6887,
+              25.5124
+            ]
+          },
+          "gflops": {
+            "median": 5801.88,
+            "min": 5387.13,
+            "max": 7071.19,
+            "runs": [
+              7071.19,
+              5801.88,
+              5387.13
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 35.974,
+            "min": 33.4024,
+            "max": 43.8442,
+            "runs": [
+              43.8442,
+              35.974,
+              33.4024
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 59.9566,
+            "min": 59.021,
+            "max": 67.3176,
+            "runs": [
+              59.021,
+              59.9566,
+              67.3176
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 10.2398,
+            "min": 9.95833,
+            "max": 10.2802,
+            "runs": [
+              10.2802,
+              10.2398,
+              9.95833
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "1000^3 (not a tile multiple)",
+      "m": 1000,
+      "k": 1000,
+      "n": 1000,
+      "tiles_128x128": 64,
+      "register_tiled_picks": "register_tiled_128",
+      "sm_clock_mhz_median": {
+        "median": 1500,
+        "min": 1462,
+        "max": 1702,
+        "runs": [
+          1702,
+          1462,
+          1500
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_128",
+        "register_tiled_128",
+        "register_tiled_128"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 2.85286,
+            "min": 2.51802,
+            "max": 2.91533,
+            "runs": [
+              2.51802,
+              2.91533,
+              2.85286
+            ]
+          },
+          "gflops": {
+            "median": 701.05,
+            "min": 686.029,
+            "max": 794.276,
+            "runs": [
+              794.276,
+              686.029,
+              701.05
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.34679,
+            "min": 4.25365,
+            "max": 4.92483,
+            "runs": [
+              4.92483,
+              4.25365,
+              4.34679
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.0855,
+            "min": 6.07646,
+            "max": 6.1099,
+            "runs": [
+              6.07646,
+              6.1099,
+              6.0855
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 11.7682,
+            "min": 11.7212,
+            "max": 11.8402,
+            "runs": [
+              11.7682,
+              11.8402,
+              11.7212
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 2.6409,
+            "min": 2.36339,
+            "max": 2.66752,
+            "runs": [
+              2.36339,
+              2.66752,
+              2.6409
+            ]
+          },
+          "gflops": {
+            "median": 757.319,
+            "min": 749.76,
+            "max": 846.241,
+            "runs": [
+              846.241,
+              749.76,
+              757.319
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.69568,
+            "min": 4.64881,
+            "max": 5.24703,
+            "runs": [
+              5.24703,
+              4.64881,
+              4.69568
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.57395,
+            "min": 6.47401,
+            "max": 6.6775,
+            "runs": [
+              6.47401,
+              6.6775,
+              6.57395
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 12.6742,
+            "min": 12.543,
+            "max": 12.891,
+            "runs": [
+              12.543,
+              12.891,
+              12.6742
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.08298,
+            "min": 1.06829,
+            "max": 1.08585,
+            "runs": [
+              1.06829,
+              1.08585,
+              1.08298
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.761856,
+            "min": 0.679936,
+            "max": 0.772832,
+            "runs": [
+              0.679936,
+              0.772832,
+              0.761856
+            ]
+          },
+          "gflops": {
+            "median": 2625.17,
+            "min": 2587.88,
+            "max": 2941.45,
+            "runs": [
+              2941.45,
+              2587.88,
+              2625.17
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 16.2771,
+            "min": 16.0459,
+            "max": 18.2382,
+            "runs": [
+              18.2382,
+              16.0459,
+              16.2771
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 22.7879,
+            "min": 22.503,
+            "max": 23.0482,
+            "runs": [
+              22.503,
+              23.0482,
+              22.7879
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 44.0355,
+            "min": 43.5435,
+            "max": 44.6448,
+            "runs": [
+              43.5435,
+              44.6448,
+              44.0355
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.76592,
+            "min": 3.71237,
+            "max": 3.76702,
+            "runs": [
+              3.71237,
+              3.76702,
+              3.76592
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.899072,
+            "min": 0.825152,
+            "max": 0.913408,
+            "runs": [
+              0.825152,
+              0.913408,
+              0.899072
+            ]
+          },
+          "gflops": {
+            "median": 2224.52,
+            "min": 2189.6,
+            "max": 2423.8,
+            "runs": [
+              2423.8,
+              2189.6,
+              2224.52
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 13.7929,
+            "min": 13.5764,
+            "max": 15.0285,
+            "runs": [
+              15.0285,
+              13.5764,
+              13.7929
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 19.31,
+            "min": 18.5428,
+            "max": 19.501,
+            "runs": [
+              18.5428,
+              19.501,
+              19.31
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 37.4899,
+            "min": 35.8445,
+            "max": 38.1549,
+            "runs": [
+              35.8445,
+              38.1549,
+              37.4899
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.18171,
+            "min": 3.05446,
+            "max": 3.18615,
+            "runs": [
+              3.05446,
+              3.18615,
+              3.18171
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.350208,
+            "min": 0.299008,
+            "max": 0.350208,
+            "runs": [
+              0.299008,
+              0.350208,
+              0.350208
+            ]
+          },
+          "gflops": {
+            "median": 5710.89,
+            "min": 5710.89,
+            "max": 6688.78,
+            "runs": [
+              6688.78,
+              5710.89,
+              5710.89
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 35.4098,
+            "min": 35.4098,
+            "max": 41.4731,
+            "runs": [
+              41.4731,
+              35.4098,
+              35.4098
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 50.8622,
+            "min": 49.5737,
+            "max": 51.1713,
+            "runs": [
+              51.1713,
+              50.8622,
+              49.5737
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 8.49746,
+            "min": 8.44582,
+            "max": 8.53153,
+            "runs": [
+              8.49746,
+              8.44582,
+              8.53153
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "1023x1029x1031 (odd)",
+      "m": 1023,
+      "k": 1029,
+      "n": 1031,
+      "tiles_128x128": 72,
+      "register_tiled_picks": "register_tiled_128",
+      "sm_clock_mhz_median": {
+        "median": 1417,
+        "min": 1417,
+        "max": 1672,
+        "runs": [
+          1672,
+          1417,
+          1417
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_128",
+        "register_tiled_128",
+        "register_tiled_128"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 3.2768,
+            "min": 2.78366,
+            "max": 3.28294,
+            "runs": [
+              2.78366,
+              3.2768,
+              3.28294
+            ]
+          },
+          "gflops": {
+            "median": 662.414,
+            "min": 661.175,
+            "max": 779.763,
+            "runs": [
+              779.763,
+              662.414,
+              661.175
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.10723,
+            "min": 4.09955,
+            "max": 4.83484,
+            "runs": [
+              4.83484,
+              4.10723,
+              4.09955
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.07554,
+            "min": 6.07247,
+            "max": 6.08694,
+            "runs": [
+              6.07247,
+              6.08694,
+              6.07554
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 12.2915,
+            "min": 12.2155,
+            "max": 14.0444,
+            "runs": [
+              12.2155,
+              12.2915,
+              14.0444
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 2.94901,
+            "min": 2.54157,
+            "max": 2.95821,
+            "runs": [
+              2.54157,
+              2.94901,
+              2.95821
+            ]
+          },
+          "gflops": {
+            "median": 736.044,
+            "min": 733.755,
+            "max": 854.039,
+            "runs": [
+              854.039,
+              736.044,
+              733.755
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.56376,
+            "min": 4.54957,
+            "max": 5.29538,
+            "runs": [
+              5.29538,
+              4.56376,
+              4.54957
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.74248,
+            "min": 6.6509,
+            "max": 6.76352,
+            "runs": [
+              6.6509,
+              6.76352,
+              6.74248
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 13.6728,
+            "min": 13.3793,
+            "max": 15.5798,
+            "runs": [
+              13.3793,
+              13.6728,
+              15.5798
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.11185,
+            "min": 1.09475,
+            "max": 1.11187,
+            "runs": [
+              1.09475,
+              1.11185,
+              1.11187
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.821696,
+            "min": 0.708992,
+            "max": 0.833536,
+            "runs": [
+              0.708992,
+              0.821696,
+              0.833536
+            ]
+          },
+          "gflops": {
+            "median": 2641.61,
+            "min": 2604.09,
+            "max": 3061.53,
+            "runs": [
+              3061.53,
+              2641.61,
+              2604.09
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 16.379,
+            "min": 16.1464,
+            "max": 18.9827,
+            "runs": [
+              18.9827,
+              16.379,
+              16.1464
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 23.929,
+            "min": 23.8419,
+            "max": 24.2738,
+            "runs": [
+              23.8419,
+              24.2738,
+              23.929
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 49,
+            "min": 48.0739,
+            "max": 55.3263,
+            "runs": [
+              48.0739,
+              49,
+              55.3263
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.97586,
+            "min": 3.93495,
+            "max": 3.98994,
+            "runs": [
+              3.93495,
+              3.98994,
+              3.97586
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.971776,
+            "min": 0.866304,
+            "max": 0.981504,
+            "runs": [
+              0.866304,
+              0.971776,
+              0.981504
+            ]
+          },
+          "gflops": {
+            "median": 2233.64,
+            "min": 2211.5,
+            "max": 2505.59,
+            "runs": [
+              2505.59,
+              2233.64,
+              2211.5
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 13.8495,
+            "min": 13.7122,
+            "max": 15.5356,
+            "runs": [
+              15.5356,
+              13.8495,
+              13.7122
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 20.3215,
+            "min": 19.5125,
+            "max": 20.525,
+            "runs": [
+              19.5125,
+              20.525,
+              20.3215
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 41.5045,
+            "min": 39.4919,
+            "max": 46.9604,
+            "runs": [
+              39.4919,
+              41.5045,
+              46.9604
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.36699,
+            "min": 3.21787,
+            "max": 3.36873,
+            "runs": [
+              3.21787,
+              3.36699,
+              3.36873
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.404912,
+            "min": 0.345456,
+            "max": 0.468992,
+            "runs": [
+              0.345456,
+              0.404912,
+              0.468992
+            ]
+          },
+          "gflops": {
+            "median": 5360.67,
+            "min": 4628.22,
+            "max": 6283.29,
+            "runs": [
+              6283.29,
+              5360.67,
+              4628.22
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 33.2383,
+            "min": 28.6968,
+            "max": 38.9589,
+            "runs": [
+              38.9589,
+              33.2383,
+              28.6968
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 48.9316,
+            "min": 42.5288,
+            "max": 49.2593,
+            "runs": [
+              48.9316,
+              49.2593,
+              42.5288
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 8.1357,
+            "min": 7.12028,
+            "max": 8.18629,
+            "runs": [
+              8.18629,
+              8.1357,
+              7.12028
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "256x1024x1024 (matmul_bias_relu)",
+      "m": 256,
+      "k": 1024,
+      "n": 1024,
+      "tiles_128x128": 16,
+      "register_tiled_picks": "register_tiled_64",
+      "sm_clock_mhz_median": {
+        "median": 1695,
+        "min": 1657,
+        "max": 1867,
+        "runs": [
+          1867,
+          1695,
+          1657
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_64",
+        "register_tiled_64",
+        "register_tiled_64"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 0.710656,
+            "min": 0.648,
+            "max": 0.730112,
+            "runs": [
+              0.648,
+              0.710656,
+              0.730112
+            ]
+          },
+          "gflops": {
+            "median": 755.458,
+            "min": 735.327,
+            "max": 828.504,
+            "runs": [
+              828.504,
+              755.458,
+              735.327
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.68414,
+            "min": 4.55932,
+            "max": 5.13706,
+            "runs": [
+              5.13706,
+              4.68414,
+              4.55932
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 5.77825,
+            "min": 5.77816,
+            "max": 5.80336,
+            "runs": [
+              5.77816,
+              5.80336,
+              5.77825
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 18.2848,
+            "min": 16.5084,
+            "max": 19.1899,
+            "runs": [
+              18.2848,
+              16.5084,
+              19.1899
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 0.612704,
+            "min": 0.565248,
+            "max": 0.627712,
+            "runs": [
+              0.565248,
+              0.612704,
+              0.627712
+            ]
+          },
+          "gflops": {
+            "median": 876.232,
+            "min": 855.282,
+            "max": 949.797,
+            "runs": [
+              949.797,
+              876.232,
+              855.282
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 5.43299,
+            "min": 5.30309,
+            "max": 5.88912,
+            "runs": [
+              5.88912,
+              5.43299,
+              5.30309
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.72087,
+            "min": 6.62408,
+            "max": 6.73113,
+            "runs": [
+              6.62408,
+              6.73113,
+              6.72087
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 20.8562,
+            "min": 19.0978,
+            "max": 22.292,
+            "runs": [
+              20.8562,
+              19.0978,
+              22.292
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.16044,
+            "min": 1.1476,
+            "max": 1.16403,
+            "runs": [
+              1.1476,
+              1.16044,
+              1.16403
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.303104,
+            "min": 0.280288,
+            "max": 0.311296,
+            "runs": [
+              0.280288,
+              0.303104,
+              0.311296
+            ]
+          },
+          "gflops": {
+            "median": 1771.24,
+            "min": 1724.63,
+            "max": 1915.43,
+            "runs": [
+              1915.43,
+              1771.24,
+              1724.63
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 10.9824,
+            "min": 10.6934,
+            "max": 11.8764,
+            "runs": [
+              11.8764,
+              10.9824,
+              10.6934
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 13.5523,
+            "min": 13.3586,
+            "max": 13.6065,
+            "runs": [
+              13.3586,
+              13.6065,
+              13.5523
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 41.8403,
+            "min": 38.4003,
+            "max": 44.8183,
+            "runs": [
+              41.8403,
+              38.4003,
+              44.8183
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 2.3549,
+            "min": 2.32159,
+            "max": 2.35914,
+            "runs": [
+              2.32159,
+              2.3549,
+              2.35914
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.283648,
+            "min": 0.265216,
+            "max": 0.289792,
+            "runs": [
+              0.265216,
+              0.283648,
+              0.289792
+            ]
+          },
+          "gflops": {
+            "median": 1892.74,
+            "min": 1852.61,
+            "max": 2024.28,
+            "runs": [
+              2024.28,
+              1892.74,
+              1852.61
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 11.7357,
+            "min": 11.4869,
+            "max": 12.5513,
+            "runs": [
+              12.5513,
+              11.7357,
+              11.4869
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 14.5398,
+            "min": 14.1177,
+            "max": 14.5579,
+            "runs": [
+              14.1177,
+              14.5398,
+              14.5579
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 44.6721,
+            "min": 41.8182,
+            "max": 48.1458,
+            "runs": [
+              44.6721,
+              41.8182,
+              48.1458
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 2.51058,
+            "min": 2.43819,
+            "max": 2.52627,
+            "runs": [
+              2.43819,
+              2.51058,
+              2.52627
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.118784,
+            "min": 0.1176,
+            "max": 0.140288,
+            "runs": [
+              0.1176,
+              0.118784,
+              0.140288
+            ]
+          },
+          "gflops": {
+            "median": 4519.72,
+            "min": 3826.92,
+            "max": 4565.23,
+            "runs": [
+              4565.23,
+              4519.72,
+              3826.92
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 28.0241,
+            "min": 23.7284,
+            "max": 28.3062,
+            "runs": [
+              28.3062,
+              28.0241,
+              23.7284
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 31.8388,
+            "min": 30.0722,
+            "max": 34.7201,
+            "runs": [
+              31.8388,
+              34.7201,
+              30.0722
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 5.46903,
+            "min": 5.21108,
+            "max": 6.05752,
+            "runs": [
+              5.46903,
+              6.05752,
+              5.21108
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "128x512x2048 (MLP layer 1, B=128)",
+      "m": 128,
+      "k": 512,
+      "n": 2048,
+      "tiles_128x128": 16,
+      "register_tiled_picks": "register_tiled_64",
+      "sm_clock_mhz_median": {
+        "median": 1785,
+        "min": 1740,
+        "max": 1920,
+        "runs": [
+          1920,
+          1785,
+          1740
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_64",
+        "register_tiled_64",
+        "register_tiled_64"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 0.3448,
+            "min": 0.319488,
+            "max": 0.352256,
+            "runs": [
+              0.319488,
+              0.3448,
+              0.352256
+            ]
+          },
+          "gflops": {
+            "median": 778.525,
+            "min": 762.047,
+            "max": 840.205,
+            "runs": [
+              840.205,
+              778.525,
+              762.047
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.82716,
+            "min": 4.72499,
+            "max": 5.20961,
+            "runs": [
+              5.20961,
+              4.82716,
+              4.72499
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 5.69801,
+            "min": 5.67902,
+            "max": 5.70258,
+            "runs": [
+              5.69801,
+              5.67902,
+              5.70258
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 27.7143,
+            "min": 25.8416,
+            "max": 30.6125,
+            "runs": [
+              30.6125,
+              25.8416,
+              27.7143
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 0.295936,
+            "min": 0.277504,
+            "max": 0.302144,
+            "runs": [
+              0.277504,
+              0.295936,
+              0.302144
+            ]
+          },
+          "gflops": {
+            "median": 907.073,
+            "min": 888.436,
+            "max": 967.321,
+            "runs": [
+              967.321,
+              907.073,
+              888.436
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 5.62421,
+            "min": 5.50865,
+            "max": 5.99777,
+            "runs": [
+              5.99777,
+              5.62421,
+              5.50865
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.61672,
+            "min": 6.56007,
+            "max": 6.64837,
+            "runs": [
+              6.56007,
+              6.61672,
+              6.64837
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 32.1425,
+            "min": 30.061,
+            "max": 35.318,
+            "runs": [
+              35.318,
+              30.061,
+              32.1425
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.16286,
+            "min": 1.15205,
+            "max": 1.16424,
+            "runs": [
+              1.15205,
+              1.16286,
+              1.16424
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.148416,
+            "min": 0.13824,
+            "max": 0.150528,
+            "runs": [
+              0.13824,
+              0.148416,
+              0.150528
+            ]
+          },
+          "gflops": {
+            "median": 1808.67,
+            "min": 1783.29,
+            "max": 1941.81,
+            "runs": [
+              1941.81,
+              1808.67,
+              1783.29
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 11.2145,
+            "min": 11.0571,
+            "max": 12.04,
+            "runs": [
+              12.04,
+              11.2145,
+              11.0571
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 13.1935,
+            "min": 13.1687,
+            "max": 13.3448,
+            "runs": [
+              13.1687,
+              13.1935,
+              13.3448
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 63.9084,
+            "min": 59.6119,
+            "max": 70.5005,
+            "runs": [
+              70.5005,
+              59.6119,
+              63.9084
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 2.33239,
+            "min": 2.32402,
+            "max": 2.34014,
+            "runs": [
+              2.32402,
+              2.33239,
+              2.34014
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.142336,
+            "min": 0.134144,
+            "max": 0.144128,
+            "runs": [
+              0.134144,
+              0.142336,
+              0.144128
+            ]
+          },
+          "gflops": {
+            "median": 1885.93,
+            "min": 1862.48,
+            "max": 2001.1,
+            "runs": [
+              2001.1,
+              1885.93,
+              1862.48
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 11.6935,
+            "min": 11.5481,
+            "max": 12.4076,
+            "runs": [
+              12.4076,
+              11.6935,
+              11.5481
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 13.7571,
+            "min": 13.5708,
+            "max": 13.9374,
+            "runs": [
+              13.5708,
+              13.7571,
+              13.9374
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 67.8571,
+            "min": 63.2218,
+            "max": 73.3746,
+            "runs": [
+              73.3746,
+              63.2218,
+              67.8571
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 2.4192,
+            "min": 2.38044,
+            "max": 2.44286,
+            "runs": [
+              2.38044,
+              2.4192,
+              2.44286
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.09728,
+            "min": 0.089088,
+            "max": 0.098304,
+            "runs": [
+              0.098304,
+              0.089088,
+              0.09728
+            ]
+          },
+          "gflops": {
+            "median": 2759.41,
+            "min": 2730.67,
+            "max": 3013.15,
+            "runs": [
+              2730.67,
+              3013.15,
+              2759.41
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 17.1094,
+            "min": 16.9312,
+            "max": 18.6827,
+            "runs": [
+              16.9312,
+              18.6827,
+              17.1094
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 20.6493,
+            "min": 18.5185,
+            "max": 21.9797,
+            "runs": [
+              18.5185,
+              21.9797,
+              20.6493
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 3.60825,
+            "min": 3.26664,
+            "max": 3.86974,
+            "runs": [
+              3.26664,
+              3.86974,
+              3.60825
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "128x2048x512 (MLP layer 2, B=128)",
+      "m": 128,
+      "k": 2048,
+      "n": 512,
+      "tiles_128x128": 4,
+      "register_tiled_picks": "register_tiled_64",
+      "sm_clock_mhz_median": {
+        "median": 1867,
+        "min": 1837,
+        "max": 1972,
+        "runs": [
+          1972,
+          1867,
+          1837
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_64",
+        "register_tiled_64",
+        "register_tiled_64"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 0.355328,
+            "min": 0.342016,
+            "max": 0.361472,
+            "runs": [
+              0.342016,
+              0.355328,
+              0.361472
+            ]
+          },
+          "gflops": {
+            "median": 755.458,
+            "min": 742.618,
+            "max": 784.862,
+            "runs": [
+              784.862,
+              755.458,
+              742.618
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.68414,
+            "min": 4.60452,
+            "max": 4.86646,
+            "runs": [
+              4.86646,
+              4.68414,
+              4.60452
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 5.26374,
+            "min": 5.18233,
+            "max": 5.26872,
+            "runs": [
+              5.18233,
+              5.26872,
+              5.26374
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 23.3004,
+            "min": 20.7353,
+            "max": 25.0743,
+            "runs": [
+              23.3004,
+              25.0743,
+              20.7353
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 0.366592,
+            "min": 0.351232,
+            "max": 0.37376,
+            "runs": [
+              0.351232,
+              0.366592,
+              0.37376
+            ]
+          },
+          "gflops": {
+            "median": 732.246,
+            "min": 718.203,
+            "max": 764.268,
+            "runs": [
+              764.268,
+              732.246,
+              718.203
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.54021,
+            "min": 4.45314,
+            "max": 4.73877,
+            "runs": [
+              4.73877,
+              4.54021,
+              4.45314
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 5.09069,
+            "min": 5.04635,
+            "max": 5.10683,
+            "runs": [
+              5.04635,
+              5.10683,
+              5.09069
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 22.6097,
+            "min": 20.0585,
+            "max": 24.3026,
+            "runs": [
+              22.6097,
+              24.3026,
+              20.0585
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 0.969276,
+            "min": 0.968991,
+            "max": 0.971293,
+            "runs": [
+              0.971293,
+              0.968991,
+              0.969276
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.540672,
+            "min": 0.520192,
+            "max": 0.550912,
+            "runs": [
+              0.520192,
+              0.540672,
+              0.550912
+            ]
+          },
+          "gflops": {
+            "median": 496.485,
+            "min": 487.256,
+            "max": 516.031,
+            "runs": [
+              516.031,
+              496.485,
+              487.256
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 3.0784,
+            "min": 3.02118,
+            "max": 3.1996,
+            "runs": [
+              3.1996,
+              3.0784,
+              3.02118
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 3.45372,
+            "min": 3.40728,
+            "max": 3.46259,
+            "runs": [
+              3.40728,
+              3.46259,
+              3.45372
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 15.2582,
+            "min": 13.594,
+            "max": 16.3873,
+            "runs": [
+              15.2582,
+              16.3873,
+              13.594
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 0.656886,
+            "min": 0.655823,
+            "max": 0.657624,
+            "runs": [
+              0.655823,
+              0.657624,
+              0.656886
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.474048,
+            "min": 0.45568,
+            "max": 0.48128,
+            "runs": [
+              0.45568,
+              0.474048,
+              0.48128
+            ]
+          },
+          "gflops": {
+            "median": 566.262,
+            "min": 557.753,
+            "max": 589.088,
+            "runs": [
+              589.088,
+              566.262,
+              557.753
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 3.51105,
+            "min": 3.45829,
+            "max": 3.65258,
+            "runs": [
+              3.65258,
+              3.51105,
+              3.45829
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 3.94923,
+            "min": 3.88966,
+            "max": 3.95341,
+            "runs": [
+              3.88966,
+              3.94923,
+              3.95341
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 17.8725,
+            "min": 16.081,
+            "max": 19.0578,
+            "runs": [
+              17.8725,
+              19.0578,
+              16.081
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 0.751779,
+            "min": 0.751009,
+            "max": 0.752643,
+            "runs": [
+              0.751779,
+              0.751009,
+              0.752643
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.079872,
+            "min": 0.07552,
+            "max": 0.089792,
+            "runs": [
+              0.079872,
+              0.089792,
+              0.07552
+            ]
+          },
+          "gflops": {
+            "median": 3360.82,
+            "min": 2989.53,
+            "max": 3554.49,
+            "runs": [
+              3360.82,
+              2989.53,
+              3554.49
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 20.8384,
+            "min": 18.5362,
+            "max": 22.0393,
+            "runs": [
+              20.8384,
+              18.5362,
+              22.0393
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 22.191,
+            "min": 20.8496,
+            "max": 25.1946,
+            "runs": [
+              22.191,
+              20.8496,
+              25.1946
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 4.29177,
+            "min": 3.98815,
+            "max": 4.8227,
+            "runs": [
+              4.29177,
+              3.98815,
+              4.8227
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "shape": "512x2048x512 (MLP layer 2, B=512)",
+      "m": 512,
+      "k": 2048,
+      "n": 512,
+      "tiles_128x128": 16,
+      "register_tiled_picks": "register_tiled_64",
+      "sm_clock_mhz_median": {
+        "median": 1612,
+        "min": 1560,
+        "max": 1762,
+        "runs": [
+          1762,
+          1612,
+          1560
+        ]
+      },
+      "faster_register_tile_per_run": [
+        "register_tiled_64",
+        "register_tiled_64",
+        "register_tiled_64"
+      ],
+      "kernels": [
+        {
+          "kernel": "naive",
+          "median_ms": {
+            "median": 1.48787,
+            "min": 1.35066,
+            "max": 1.52957,
+            "runs": [
+              1.35066,
+              1.48787,
+              1.52957
+            ]
+          },
+          "gflops": {
+            "median": 721.663,
+            "min": 701.99,
+            "max": 794.978,
+            "runs": [
+              794.978,
+              721.663,
+              701.99
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 4.4746,
+            "min": 4.35262,
+            "max": 4.92918,
+            "runs": [
+              4.92918,
+              4.4746,
+              4.35262
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 5.85929,
+            "min": 5.82919,
+            "max": 5.87473,
+            "runs": [
+              5.87473,
+              5.82919,
+              5.85929
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 12.4812,
+            "min": 12.3396,
+            "max": 13.348,
+            "runs": [
+              12.4812,
+              13.348,
+              12.3396
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1,
+            "min": 1,
+            "max": 1,
+            "runs": [
+              1,
+              1,
+              1
+            ]
+          }
+        },
+        {
+          "kernel": "tiled",
+          "median_ms": {
+            "median": 1.27787,
+            "min": 1.16224,
+            "max": 1.30765,
+            "runs": [
+              1.16224,
+              1.27787,
+              1.30765
+            ]
+          },
+          "gflops": {
+            "median": 840.258,
+            "min": 821.125,
+            "max": 923.855,
+            "runs": [
+              923.855,
+              840.258,
+              821.125
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 5.20993,
+            "min": 5.0913,
+            "max": 5.72827,
+            "runs": [
+              5.72827,
+              5.20993,
+              5.0913
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 6.82711,
+            "min": 6.78713,
+            "max": 6.85367,
+            "runs": [
+              6.82711,
+              6.78713,
+              6.85367
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 14.5168,
+            "min": 14.4219,
+            "max": 15.6474,
+            "runs": [
+              14.5168,
+              15.6474,
+              14.4219
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 1.1691,
+            "min": 1.15881,
+            "max": 1.17041,
+            "runs": [
+              1.15881,
+              1.1691,
+              1.17041
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_128",
+          "median_ms": {
+            "median": 0.639344,
+            "min": 0.586752,
+            "max": 0.653312,
+            "runs": [
+              0.586752,
+              0.639344,
+              0.653312
+            ]
+          },
+          "gflops": {
+            "median": 1679.44,
+            "min": 1643.54,
+            "max": 1829.98,
+            "runs": [
+              1829.98,
+              1679.44,
+              1643.54
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 10.4132,
+            "min": 10.1906,
+            "max": 11.3466,
+            "runs": [
+              11.3466,
+              10.4132,
+              10.1906
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 13.5656,
+            "min": 13.5232,
+            "max": 13.7181,
+            "runs": [
+              13.5232,
+              13.5656,
+              13.7181
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 28.9063,
+            "min": 28.7603,
+            "max": 31.3598,
+            "runs": [
+              28.7603,
+              31.3598,
+              28.9063
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 2.34277,
+            "min": 2.2967,
+            "max": 2.34556,
+            "runs": [
+              2.2967,
+              2.34556,
+              2.34277
+            ]
+          }
+        },
+        {
+          "kernel": "register_tiled_64",
+          "median_ms": {
+            "median": 0.586688,
+            "min": 0.543744,
+            "max": 0.592736,
+            "runs": [
+              0.543744,
+              0.586688,
+              0.592736
+            ]
+          },
+          "gflops": {
+            "median": 1830.18,
+            "min": 1811.5,
+            "max": 1974.72,
+            "runs": [
+              1974.72,
+              1830.18,
+              1811.5
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 11.3478,
+            "min": 11.232,
+            "max": 12.244,
+            "runs": [
+              12.244,
+              11.3478,
+              11.232
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 14.7831,
+            "min": 14.5928,
+            "max": 15.12,
+            "runs": [
+              14.5928,
+              14.7831,
+              15.12
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 31.7869,
+            "min": 31.0515,
+            "max": 34.3363,
+            "runs": [
+              31.0515,
+              34.3363,
+              31.7869
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 2.55116,
+            "min": 2.48631,
+            "max": 2.58247,
+            "runs": [
+              2.48631,
+              2.55116,
+              2.58247
+            ]
+          }
+        },
+        {
+          "kernel": "cublas",
+          "median_ms": {
+            "median": 0.18944,
+            "min": 0.169984,
+            "max": 0.2048,
+            "runs": [
+              0.169984,
+              0.2048,
+              0.18944
+            ]
+          },
+          "gflops": {
+            "median": 5667.98,
+            "min": 5242.88,
+            "max": 6316.72,
+            "runs": [
+              6316.72,
+              5242.88,
+              5667.98
+            ]
+          },
+          "percent_of_peak_at_max_clock": {
+            "median": 35.1437,
+            "min": 32.5079,
+            "max": 39.1662,
+            "runs": [
+              39.1662,
+              32.5079,
+              35.1437
+            ]
+          },
+          "percent_of_peak_at_measured_clock": {
+            "median": 46.6793,
+            "min": 42.349,
+            "max": 47.3088,
+            "runs": [
+              46.6793,
+              42.349,
+              47.3088
+            ]
+          },
+          "percent_of_cublas": {
+            "median": 100,
+            "min": 100,
+            "max": 100,
+            "runs": [
+              100,
+              100,
+              100
+            ]
+          },
+          "speedup_over_naive": {
+            "median": 8.01205,
+            "min": 7.49178,
+            "max": 8.10399,
+            "runs": [
+              8.01205,
+              7.49178,
+              8.10399
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

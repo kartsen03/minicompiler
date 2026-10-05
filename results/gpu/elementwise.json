@@ -1,1 +1,575 @@
-{"benchmark": "GELU chain on the GPU: one kernel per op (unfused) vs one fused kernel", "method": "CUDA events around each enqueue of the whole graph on one stream; inputs already on the device; 10 warmup enqueues per variant, then interleaved rounds (rotating order); time = median over rounds; speedup = median over rounds of unfused/fused in the same round; bandwidth = bytes each kernel reads and writes / median time", "environment": {"commit": "b3b3474", "cpu": "12th Gen Intel(R) Core(TM) i7-12700H", "hardware_threads": 20, "os": "Ubuntu 24.04.4 LTS, kernel 6.6.114.1-microsoft-standard-WSL2", "compiler": "gcc 13.3.0", "eigen": "3.4.0", "build_flags": "Release, march_native=ON", "threads": "1 (Eigen without OpenMP)", "host_power_plan": "Turbo"}, "results": [{"size": "1x4096 (16 KB)", "elements": 4096, "max_normwise_diff_fused_vs_unfused": 5.96046e-08, "variants": [{"variant": "unfused", "passes": "dne,fold,dne", "kernel_launches": 9, "bytes_moved": 360448, "timing": {"warmup": 10, "reps": 5000, "median_ms": 0.084992, "min_ms": 0.03072, "p10_ms": 0.04608, "p90_ms": 0.13824, "mean_ms": 0.0876231}, "achieved_bandwidth_gbs": 4.24096, "percent_of_peak_bandwidth": 1.26201}, {"variant": "fused", "passes": "default", "kernel_launches": 1, "bytes_moved": 32768, "timing": {"warmup": 10, "reps": 5000, "median_ms": 0.007168, "min_ms": 0.004096, "p10_ms": 0.006144, "p90_ms": 0.0296992, "mean_ms": 0.0118477}, "achieved_bandwidth_gbs": 4.57143, "percent_of_peak_bandwidth": 1.36035, "speedup_paired": {"median": 10.5714, "p10": 3.58311, "p90": 16.6942}}]}, {"size": "16x4096 (256 KB)", "elements": 65536, "max_normwise_diff_fused_vs_unfused": 5.96046e-08, "variants": [{"variant": "unfused", "passes": "dne,fold,dne", "kernel_launches": 9, "bytes_moved": 5.76717e+06, "timing": {"warmup": 10, "reps": 5000, "median_ms": 0.08704, "min_ms": 0.033792, "p10_ms": 0.060416, "p90_ms": 0.129024, "mean_ms": 0.0902974}, "achieved_bandwidth_gbs": 66.2588, "percent_of_peak_bandwidth": 19.7171}, {"variant": "fused", "passes": "default", "kernel_launches": 1, "bytes_moved": 524288, "timing": {"warmup": 10, "reps": 5000, "median_ms": 0.007168, "min_ms": 0.00512, "p10_ms": 0.006144, "p90_ms": 0.030432, "mean_ms": 0.0122666}, "achieved_bandwidth_gbs": 73.1429, "percent_of_peak_bandwidth": 21.7656, "speedup_paired": {"median": 11.8571, "p10": 4.17958, "p90": 14.1667}}]}, {"size": "256x4096 (4 MB)", "elements": 1048576, "max_normwise_diff_fused_vs_unfused": 1.19209e-07, "variants": [{"variant": "unfused", "passes": "dne,fold,dne", "kernel_launches": 9, "bytes_moved": 9.22747e+07, "timing": {"warmup": 10, "reps": 4683, "median_ms": 0.359424, "min_ms": 0.35312, "p10_ms": 0.356352, "p90_ms": 0.36352, "mean_ms": 0.360851}, "achieved_bandwidth_gbs": 256.729, "percent_of_peak_bandwidth": 76.3966}, {"variant": "fused", "passes": "default", "kernel_launches": 1, "bytes_moved": 8.38861e+06, "timing": {"warmup": 10, "reps": 4683, "median_ms": 0.037888, "min_ms": 0.034816, "p10_ms": 0.036864, "p90_ms": 0.039936, "mean_ms": 0.0387756}, "achieved_bandwidth_gbs": 221.405, "percent_of_peak_bandwidth": 65.8851, "speedup_paired": {"median": 9.48649, "p10": 9.01785, "p90": 9.77763}}]}, {"size": "1024x4096 (16 MB)", "elements": 4194304, "max_normwise_diff_fused_vs_unfused": 1.19209e-07, "variants": [{"variant": "unfused", "passes": "dne,fold,dne", "kernel_launches": 9, "bytes_moved": 3.69099e+08, "timing": {"warmup": 10, "reps": 1321, "median_ms": 1.35373, "min_ms": 1.34432, "p10_ms": 1.34963, "p90_ms": 1.36086, "mean_ms": 1.35517}, "achieved_bandwidth_gbs": 272.654, "percent_of_peak_bandwidth": 81.1353}, {"variant": "fused", "passes": "default", "kernel_launches": 1, "bytes_moved": 3.35544e+07, "timing": {"warmup": 10, "reps": 1321, "median_ms": 0.13312, "min_ms": 0.129024, "p10_ms": 0.131872, "p90_ms": 0.136192, "mean_ms": 0.13433}, "achieved_bandwidth_gbs": 252.062, "percent_of_peak_bandwidth": 75.0076, "speedup_paired": {"median": 10.1692, "p10": 9.94737, "p90": 10.2969}}]}, {"size": "4096x4096 (64 MB)", "elements": 16777216, "max_normwise_diff_fused_vs_unfused": 1.19209e-07, "variants": [{"variant": "unfused", "passes": "dne,fold,dne", "kernel_launches": 9, "bytes_moved": 1.4764e+09, "timing": {"warmup": 10, "reps": 343, "median_ms": 5.30944, "min_ms": 5.29306, "p10_ms": 5.30227, "p90_ms": 5.32378, "mean_ms": 5.31253}, "achieved_bandwidth_gbs": 278.07, "percent_of_peak_bandwidth": 82.7471}, {"variant": "fused", "passes": "default", "kernel_launches": 1, "bytes_moved": 1.34218e+08, "timing": {"warmup": 10, "reps": 343, "median_ms": 0.512, "min_ms": 0.505856, "p10_ms": 0.508928, "p90_ms": 0.521011, "mean_ms": 0.513779}, "achieved_bandwidth_gbs": 262.144, "percent_of_peak_bandwidth": 78.0079, "speedup_paired": {"median": 10.3727, "p10": 10.2232, "p90": 10.4357}}]}, {"size": "16384x4096 (256 MB)", "elements": 67108864, "max_normwise_diff_fused_vs_unfused": 1.19209e-07, "variants": [{"variant": "unfused", "passes": "dne,fold,dne", "kernel_launches": 9, "bytes_moved": 5.90558e+09, "timing": {"warmup": 10, "reps": 86, "median_ms": 21.121, "min_ms": 21.0913, "p10_ms": 21.1011, "p90_ms": 21.1446, "mean_ms": 21.1292}, "achieved_bandwidth_gbs": 279.607, "percent_of_peak_bandwidth": 83.2044}, {"variant": "fused", "passes": "default", "kernel_launches": 1, "bytes_moved": 5.36871e+08, "timing": {"warmup": 10, "reps": 86, "median_ms": 2.02445, "min_ms": 2.01216, "p10_ms": 2.01523, "p90_ms": 2.03674, "mean_ms": 2.02518}, "achieved_bandwidth_gbs": 265.194, "percent_of_peak_bandwidth": 78.9154, "speedup_paired": {"median": 10.4355, "p10": 10.3835, "p90": 10.4809}}]}], "device": {"name": "NVIDIA GeForce RTX 3060 Laptop GPU", "compute_capability": "8.6", "sm_count": 30, "fp32_lanes_per_sm": 128, "sm_clock_mhz_cuda_attribute": 1425, "max_sm_clock_mhz_nvml": 2100, "mem_clock_mhz": 7001, "bus_width_bits": 192, "peak_bandwidth_gbs": 336.048, "cuda_runtime": 13010, "cuda_driver": 13010, "sm_clock_mhz_during_run": {"min": 1402, "median": 1425, "max": 2047}}}
+{
+  "benchmark": "GELU chain on the GPU: one kernel per op (unfused) vs one fused kernel",
+  "method": "CUDA events around each enqueue of the whole graph on one stream; inputs already on the device; 10 warmup enqueues per variant and warm-up rounds until the GPU has been busy for warmup_seconds (it boosts only under sustained load), then interleaved rounds (rotating order); time = median over rounds; speedup = median over rounds of unfused/fused in the same round; bandwidth = bytes each kernel reads and writes / median time",
+  "warmup_seconds": 1,
+  "seconds_per_config": 2,
+  "environment": {
+    "commit": "3b6c819",
+    "cpu": "12th Gen Intel(R) Core(TM) i7-12700H",
+    "hardware_threads": 20,
+    "os": "Ubuntu 24.04.4 LTS, kernel 6.6.114.1-microsoft-standard-WSL2",
+    "compiler": "gcc 13.3.0",
+    "eigen": "3.4.0",
+    "build_flags": "Release, march_native=ON",
+    "threads": "1 (Eigen without OpenMP)",
+    "host_power_plan": "Turbo"
+  },
+  "device": {
+    "name": "NVIDIA GeForce RTX 3060 Laptop GPU",
+    "compute_capability": "8.6",
+    "sm_count": 30,
+    "fp32_lanes_per_sm": 128,
+    "sm_clock_mhz_cuda_attribute": 1425,
+    "max_sm_clock_mhz_nvml": 2100,
+    "mem_clock_mhz": 7001,
+    "bus_width_bits": 192,
+    "peak_bandwidth_gbs": 336.048,
+    "cuda_runtime": 13010,
+    "cuda_driver": 13010,
+    "sm_clock_mhz_during_run": {
+      "min": 210,
+      "median_of_run_medians": 1425,
+      "max": 2025
+    }
+  },
+  "runs": 3,
+  "commits": [
+    "3b6c819"
+  ],
+  "results": [
+    {
+      "size": "1x4096 (16 KB)",
+      "elements": 4096,
+      "max_normwise_diff_fused_vs_unfused": 5.96046e-08,
+      "variants": [
+        {
+          "variant": "unfused",
+          "passes": "dne,fold,dne",
+          "kernel_launches": 9,
+          "bytes_moved": 344064,
+          "median_ms": {
+            "median": 0.059392,
+            "min": 0.058368,
+            "max": 0.067056,
+            "runs": [
+              0.058368,
+              0.067056,
+              0.059392
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 5.7931,
+            "min": 5.13099,
+            "max": 5.89474,
+            "runs": [
+              5.89474,
+              5.13099,
+              5.7931
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 1.72389,
+            "min": 1.52686,
+            "max": 1.75414,
+            "runs": [
+              1.75414,
+              1.52686,
+              1.72389
+            ]
+          }
+        },
+        {
+          "variant": "fused",
+          "passes": "default",
+          "kernel_launches": 1,
+          "bytes_moved": 32768,
+          "median_ms": {
+            "median": 0.008192,
+            "min": 0.008192,
+            "max": 0.008192,
+            "runs": [
+              0.008192,
+              0.008192,
+              0.008192
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 4,
+            "min": 4,
+            "max": 4,
+            "runs": [
+              4,
+              4,
+              4
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 1.19031,
+            "min": 1.19031,
+            "max": 1.19031,
+            "runs": [
+              1.19031,
+              1.19031,
+              1.19031
+            ]
+          },
+          "speedup_paired": {
+            "median": 6.10172,
+            "min": 5.98437,
+            "max": 6.95729,
+            "runs": [
+              6.10172,
+              6.95729,
+              5.98437
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "size": "16x4096 (256 KB)",
+      "elements": 65536,
+      "max_normwise_diff_fused_vs_unfused": 5.96046e-08,
+      "variants": [
+        {
+          "variant": "unfused",
+          "passes": "dne,fold,dne",
+          "kernel_launches": 9,
+          "bytes_moved": 5505020.0,
+          "median_ms": {
+            "median": 0.119808,
+            "min": 0.110592,
+            "max": 0.12288,
+            "runs": [
+              0.119808,
+              0.12288,
+              0.110592
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 45.9487,
+            "min": 44.8,
+            "max": 49.7778,
+            "runs": [
+              45.9487,
+              44.8,
+              49.7778
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 13.6733,
+            "min": 13.3314,
+            "max": 14.8127,
+            "runs": [
+              13.6733,
+              13.3314,
+              14.8127
+            ]
+          }
+        },
+        {
+          "variant": "fused",
+          "passes": "default",
+          "kernel_launches": 1,
+          "bytes_moved": 524288,
+          "median_ms": {
+            "median": 0.017408,
+            "min": 0.01536,
+            "max": 0.017408,
+            "runs": [
+              0.017408,
+              0.017408,
+              0.01536
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 30.1176,
+            "min": 30.1176,
+            "max": 34.1333,
+            "runs": [
+              30.1176,
+              30.1176,
+              34.1333
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 8.9623,
+            "min": 8.9623,
+            "max": 10.1573,
+            "runs": [
+              8.9623,
+              8.9623,
+              10.1573
+            ]
+          },
+          "speedup_paired": {
+            "median": 7,
+            "min": 7,
+            "max": 7.125,
+            "runs": [
+              7,
+              7.125,
+              7
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "size": "256x4096 (4 MB)",
+      "elements": 1048576,
+      "max_normwise_diff_fused_vs_unfused": 1.19209e-07,
+      "variants": [
+        {
+          "variant": "unfused",
+          "passes": "dne,fold,dne",
+          "kernel_launches": 9,
+          "bytes_moved": 88080400.0,
+          "median_ms": {
+            "median": 0.369664,
+            "min": 0.36864,
+            "max": 0.369664,
+            "runs": [
+              0.36864,
+              0.369664,
+              0.369664
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 238.271,
+            "min": 238.271,
+            "max": 238.933,
+            "runs": [
+              238.933,
+              238.271,
+              238.271
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 70.904,
+            "min": 70.904,
+            "max": 71.101,
+            "runs": [
+              71.101,
+              70.904,
+              70.904
+            ]
+          }
+        },
+        {
+          "variant": "fused",
+          "passes": "default",
+          "kernel_launches": 1,
+          "bytes_moved": 8388610.0,
+          "median_ms": {
+            "median": 0.038752,
+            "min": 0.038752,
+            "max": 0.038912,
+            "runs": [
+              0.038752,
+              0.038752,
+              0.038912
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 216.469,
+            "min": 215.579,
+            "max": 216.469,
+            "runs": [
+              216.469,
+              216.469,
+              215.579
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 64.4161,
+            "min": 64.1512,
+            "max": 64.4161,
+            "runs": [
+              64.4161,
+              64.4161,
+              64.1512
+            ]
+          },
+          "speedup_paired": {
+            "median": 9.24242,
+            "min": 9.22123,
+            "max": 9.33202,
+            "runs": [
+              9.22123,
+              9.24242,
+              9.33202
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "size": "1024x4096 (16 MB)",
+      "elements": 4194304,
+      "max_normwise_diff_fused_vs_unfused": 1.19209e-07,
+      "variants": [
+        {
+          "variant": "unfused",
+          "passes": "dne,fold,dne",
+          "kernel_launches": 9,
+          "bytes_moved": 352322000.0,
+          "median_ms": {
+            "median": 1.14477,
+            "min": 1.14453,
+            "max": 1.14483,
+            "runs": [
+              1.14453,
+              1.14483,
+              1.14477
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 307.767,
+            "min": 307.75,
+            "max": 307.831,
+            "runs": [
+              307.831,
+              307.75,
+              307.767
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 91.5842,
+            "min": 91.579,
+            "max": 91.6034,
+            "runs": [
+              91.6034,
+              91.579,
+              91.5842
+            ]
+          }
+        },
+        {
+          "variant": "fused",
+          "passes": "default",
+          "kernel_launches": 1,
+          "bytes_moved": 33554400.0,
+          "median_ms": {
+            "median": 0.114688,
+            "min": 0.113664,
+            "max": 0.114688,
+            "runs": [
+              0.114688,
+              0.114688,
+              0.113664
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 292.571,
+            "min": 292.571,
+            "max": 295.207,
+            "runs": [
+              292.571,
+              292.571,
+              295.207
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 87.0624,
+            "min": 87.0624,
+            "max": 87.8467,
+            "runs": [
+              87.0624,
+              87.0624,
+              87.8467
+            ]
+          },
+          "speedup_paired": {
+            "median": 10.018,
+            "min": 9.99818,
+            "max": 10.1182,
+            "runs": [
+              9.99818,
+              10.018,
+              10.1182
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "size": "4096x4096 (64 MB)",
+      "elements": 16777216,
+      "max_normwise_diff_fused_vs_unfused": 1.19209e-07,
+      "variants": [
+        {
+          "variant": "unfused",
+          "passes": "dne,fold,dne",
+          "kernel_launches": 9,
+          "bytes_moved": 1409290000.0,
+          "median_ms": {
+            "median": 4.49229,
+            "min": 4.48717,
+            "max": 4.49894,
+            "runs": [
+              4.48717,
+              4.49894,
+              4.49229
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 313.712,
+            "min": 313.248,
+            "max": 314.07,
+            "runs": [
+              314.07,
+              313.248,
+              313.712
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 93.3534,
+            "min": 93.2153,
+            "max": 93.46,
+            "runs": [
+              93.46,
+              93.2153,
+              93.3534
+            ]
+          }
+        },
+        {
+          "variant": "fused",
+          "passes": "default",
+          "kernel_launches": 1,
+          "bytes_moved": 134218000.0,
+          "median_ms": {
+            "median": 0.434176,
+            "min": 0.433152,
+            "max": 0.434176,
+            "runs": [
+              0.433152,
+              0.434176,
+              0.434176
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 309.132,
+            "min": 309.132,
+            "max": 309.863,
+            "runs": [
+              309.863,
+              309.132,
+              309.132
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 91.9905,
+            "min": 91.9905,
+            "max": 92.2079,
+            "runs": [
+              92.2079,
+              91.9905,
+              91.9905
+            ]
+          },
+          "speedup_paired": {
+            "median": 10.3566,
+            "min": 10.3565,
+            "max": 10.3791,
+            "runs": [
+              10.3791,
+              10.3566,
+              10.3565
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "size": "16384x4096 (256 MB)",
+      "elements": 67108864,
+      "max_normwise_diff_fused_vs_unfused": 1.19209e-07,
+      "variants": [
+        {
+          "variant": "unfused",
+          "passes": "dne,fold,dne",
+          "kernel_launches": 9,
+          "bytes_moved": 5637140000.0,
+          "median_ms": {
+            "median": 17.963,
+            "min": 17.9464,
+            "max": 17.9661,
+            "runs": [
+              17.9464,
+              17.963,
+              17.9661
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 313.82,
+            "min": 313.766,
+            "max": 314.109,
+            "runs": [
+              314.109,
+              313.82,
+              313.766
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 93.3854,
+            "min": 93.3694,
+            "max": 93.4716,
+            "runs": [
+              93.4716,
+              93.3854,
+              93.3694
+            ]
+          }
+        },
+        {
+          "variant": "fused",
+          "passes": "default",
+          "kernel_launches": 1,
+          "bytes_moved": 536871000.0,
+          "median_ms": {
+            "median": 1.71418,
+            "min": 1.71296,
+            "max": 1.7152,
+            "runs": [
+              1.7152,
+              1.71418,
+              1.71296
+            ]
+          },
+          "achieved_bandwidth_gbs": {
+            "median": 313.195,
+            "min": 313.008,
+            "max": 313.417,
+            "runs": [
+              313.008,
+              313.195,
+              313.417
+            ]
+          },
+          "percent_of_peak_bandwidth": {
+            "median": 93.1994,
+            "min": 93.1438,
+            "max": 93.2656,
+            "runs": [
+              93.1438,
+              93.1994,
+              93.2656
+            ]
+          },
+          "speedup_paired": {
+            "median": 10.4897,
+            "min": 10.487,
+            "max": 10.4997,
+            "runs": [
+              10.4997,
+              10.4897,
+              10.487
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
