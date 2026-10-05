@@ -170,13 +170,19 @@ def roofline_svg(points: list[tuple[str, float, float]], peak_bw: float, peak_fl
     knee = peak_flops / peak_bw
     out.append(f'<polyline fill="none" stroke="#333" stroke-width="2" points="{px(x0):.1f},{py(max(y0, peak_bw * x0)):.1f} '
                f'{px(knee):.1f},{py(peak_flops):.1f} {px(x1):.1f},{py(peak_flops):.1f}"/>')
-    out.append(f'<text x="{px(x1) - 4:.1f}" y="{py(peak_flops) - 6:.1f}" text-anchor="end">FP32 peak at the profiling '
-               f'clock: {peak_flops:,.0f} GFLOP/s</text>')
-    out.append(f'<text x="{px(0.12):.1f}" y="{py(peak_bw * 0.12) - 8:.1f}">DRAM {peak_bw:.0f} GB/s</text>')
-    # Paths with the same peak share a roof and a label.
+    # Paths with the same peak share a roof and a label, the FP32 roof included
+    # (TF32 tensor cores peak where the FP32 units do on some GPUs).
     by_peak: dict[int, list[str]] = {}
+    same_as_fp32 = []
     for path, roof in tensor_roofs.items():
-        by_peak.setdefault(round(roof), []).append(path.upper())
+        if abs(roof - peak_flops) <= 0.01 * peak_flops:
+            same_as_fp32.append(path.upper())
+        else:
+            by_peak.setdefault(round(roof), []).append(path.upper())
+    fp32_label = "FP32" + "".join(f" and {p} tensor" for p in sorted(same_as_fp32))
+    out.append(f'<text x="{px(x1) - 4:.1f}" y="{py(peak_flops) - 6:.1f}" text-anchor="end">{fp32_label} peak at the '
+               f'profiling clock: {peak_flops:,.0f} GFLOP/s</text>')
+    out.append(f'<text x="{px(0.12):.1f}" y="{py(peak_bw * 0.12) - 8:.1f}">DRAM {peak_bw:.0f} GB/s</text>')
     for roof, paths in sorted(by_peak.items()):
         knee_t = roof / peak_bw
         out.append(f'<polyline fill="none" stroke="#333" stroke-width="1.5" stroke-dasharray="6 4" '
