@@ -346,20 +346,19 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 
 	bench::JsonWriter json;
 	json.begin_object();
-	json.field("benchmark", "FP32 matmul C[m,n] = A[m,k] B[k,n] (row-major): naive, shared-memory tiled and "
-	                        "register-tiled (128x128 and 64x64 tiles) kernels against cuBLAS");
+	json.field("benchmark", "FP32 matmul C[m,n] = A[m,k] B[k,n] (row-major): every kernel of the ladder (naive, "
+	                        "shared-memory tiled, register-tiled 128x128 and 64x64, vectorized, double-buffered, "
+	                        "split-K) against cuBLAS");
 	json.field("method", "GPU time of each variant's launches, from event-record nodes captured with them into a "
 	                     "CUDA graph and replayed on one stream, so host-side launch overhead (which differs between "
 	                     "cuBLAS and these kernels) is left out for all; 3 warmup "
 	                     "runs per variant and warm-up rounds until the GPU has been busy for warmup_seconds, then "
 	                     "interleaved rounds (rotating order); time = median over rounds; GFLOP/s = 2mnk / time; "
 	                     "ratios are medians over rounds of per-round ratios. Each kernel's result is checked on 1000 "
-	                     "sampled "
-	                     "elements against a float64 dot product within the FP32 error bound. cuBLAS runs in "
-	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores). "
-	                     "register_tiled_picks is the tile size the backend's register_tiled kernel uses for the "
-	                     "shape: 64x64 when the output's 128x128 tiles would keep at most three quarters of the "
-	                     "SMs busy");
+	                     "sampled elements against a float64 dot product within the FP32 error bound. cuBLAS runs in "
+	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores). auto_picks is the "
+	                     "kernel the backend's default (auto) runs for the shape: split_k when split_k_splits is "
+	                     "above 1, double_buffered otherwise");
 	json.field("warmup_seconds", warmup_seconds).field("seconds_per_config", seconds);
 	bench::write_environment(json);
 	json.key("peak_fp32_gflops").begin_object();
@@ -480,11 +479,11 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 		const MatmulVariant& naive = variants[0];
 		const MatmulVariant& cublas = variants.back();
 		const std::string picks = cuda::matmul_kernel_name(
-		    cuda::resolve_matmul_kernel(cuda::MatmulKernel::RegisterTiled, s.m, s.n, device.sm_count));
+		    cuda::resolve_matmul_kernel(cuda::MatmulKernel::Auto, s.m, s.n, s.k, device.sm_count));
 		json.begin_object();
 		json.field("shape", s.label).field("m", s.m).field("k", s.k).field("n", s.n);
 		json.field("tiles_128x128", ((s.m + 127) / 128) * ((s.n + 127) / 128));
-		json.field("register_tiled_picks", picks);
+		json.field("auto_picks", picks);
 		json.field("split_k_splits", splits);
 		json.field("sm_clock_mhz_median", clock_now);
 		json.key("kernels").begin_array();

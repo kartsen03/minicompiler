@@ -129,7 +129,7 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 		{300, 1004, 36}, {2, 12, 4}};
 	const double u = std::ldexp(1.0, -24);
 	for (const cuda::MatmulKernel kernel :
-	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
+	     {cuda::MatmulKernel::Auto, cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
 	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized,
 	      cuda::MatmulKernel::DoubleBuffered, cuda::MatmulKernel::SplitK}) {
 		cuda::CudaOptions options;
@@ -234,7 +234,7 @@ TEST(CudaBackend, SplitKSplitsSmallOutputsAcrossTheSms) {
 
 TEST(CudaBackend, MatmulKernelNamesRoundTrip) {
 	for (const cuda::MatmulKernel kernel :
-	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
+	     {cuda::MatmulKernel::Auto, cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
 	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized,
 	      cuda::MatmulKernel::DoubleBuffered, cuda::MatmulKernel::SplitK}) {
 		Result<cuda::MatmulKernel> parsed = cuda::matmul_kernel_from_name(cuda::matmul_kernel_name(kernel));
@@ -244,24 +244,21 @@ TEST(CudaBackend, MatmulKernelNamesRoundTrip) {
 	EXPECT_FALSE(cuda::matmul_kernel_from_name("register_tiled_32").ok());
 }
 
-TEST(CudaBackend, RegisterTiledUses64x64TilesWhen128x128WouldLeaveAQuarterOfTheSmsIdle) {
+TEST(CudaBackend, AutoSplitsKOnlyWhenTheOutputCannotFillTheGpu) {
 	using cuda::MatmulKernel;
-	auto resolve = [](int m, int n, int sms) {
-		return cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled, m, n, sms);
-	};
-	EXPECT_EQ(resolve(512, 512, 30), MatmulKernel::RegisterTiled64);     // 4 x 4 = 16 tiles for 30 SMs
-	EXPECT_EQ(resolve(128, 2048, 30), MatmulKernel::RegisterTiled64);    // 1 x 16
-	EXPECT_EQ(resolve(256, 1408, 30), MatmulKernel::RegisterTiled64);    // 22: 88 <= 90, the last one
-	EXPECT_EQ(resolve(128, 2944, 30), MatmulKernel::RegisterTiled128);   // 23: 92 > 90
-	EXPECT_EQ(resolve(640, 640, 30), MatmulKernel::RegisterTiled128);    // 25 keeps 83% of the SMs busy
-	EXPECT_EQ(resolve(640, 768, 30), MatmulKernel::RegisterTiled128);    // 30: one tile per SM
-	EXPECT_EQ(resolve(1000, 1000, 30), MatmulKernel::RegisterTiled128);  // 64, edge tiles count
-	EXPECT_EQ(resolve(640, 640, 40), MatmulKernel::RegisterTiled64);     // more SMs, same shape
-	EXPECT_EQ(resolve(std::numeric_limits<int>::max(), 1, 30), MatmulKernel::RegisterTiled128);  // m + 127 overflows int
+	auto resolve = [](int m, int n, int k, int sms) { return cuda::resolve_matmul_kernel(MatmulKernel::Auto, m, n, k, sms); };
+	EXPECT_EQ(resolve(128, 512, 2048, 30), MatmulKernel::SplitK);           // 4 tiles of 128x128 for 30 SMs
+	EXPECT_EQ(resolve(512, 512, 512, 30), MatmulKernel::SplitK);            // 16 tiles
+	EXPECT_EQ(resolve(640, 640, 640, 30), MatmulKernel::DoubleBuffered);    // 25 tiles: no split pays
+	EXPECT_EQ(resolve(2048, 2048, 2048, 30), MatmulKernel::DoubleBuffered); // 256 tiles
+	EXPECT_EQ(resolve(128, 128, 100, 30), MatmulKernel::DoubleBuffered);    // too little K to split
+	EXPECT_EQ(resolve(640, 640, 640, 40), MatmulKernel::SplitK);            // the same shape on 40 SMs
+	EXPECT_EQ(resolve(std::numeric_limits<int>::max(), 1, 1, 30), MatmulKernel::DoubleBuffered);  // no int overflow
 	// Any other kernel is left alone.
-	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled128, 1, 1, 30), MatmulKernel::RegisterTiled128);
-	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled64, 4096, 4096, 30), MatmulKernel::RegisterTiled64);
-	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::Naive, 1, 1, 30), MatmulKernel::Naive);
+	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled64, 4096, 4096, 4096, 30),
+	          MatmulKernel::RegisterTiled64);
+	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::SplitK, 4096, 4096, 4096, 30), MatmulKernel::SplitK);
+	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::Naive, 1, 1, 1, 30), MatmulKernel::Naive);
 }
 
 TEST(CudaBackend, CompiledGraphsReportTheMatmulKernelForEachShape) {
@@ -273,8 +270,8 @@ TEST(CudaBackend, CompiledGraphsReportTheMatmulKernelForEachShape) {
 	b.output(b.matmul(h, b.input("w2", {2048, 4096})));
 	auto exe = cuda::compile_for_cuda(std::move(b).build().value()).value();
 	const std::vector<cuda::MatmulKernel> expected = {
-		cuda::resolve_matmul_kernel(cuda::MatmulKernel::RegisterTiled, 128, 2048, sms),
-		cuda::resolve_matmul_kernel(cuda::MatmulKernel::RegisterTiled, 128, 4096, sms)};
+		cuda::resolve_matmul_kernel(cuda::MatmulKernel::Auto, 128, 2048, 512, sms),
+		cuda::resolve_matmul_kernel(cuda::MatmulKernel::Auto, 128, 4096, 2048, sms)};
 	EXPECT_EQ(exe->matmul_kernels(), expected);
 	cuda::CudaOptions options;
 	options.matmul = cuda::MatmulKernel::Tiled;

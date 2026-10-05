@@ -148,35 +148,38 @@ def gpu_matmul(results: str = "results/gpu") -> str:
     d = load(f"{results}/matmul.json")
     if not d:
         return "_Not recorded yet._"
-    rows = ["| Shape (m × k × n) | 128×128 tiles | Naive | Tiled | Register 128×128 | Register 64×64 | cuBLAS | "
-            "Picked tile: % of cuBLAS | vs naive | % of FP32 peak |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+    rows = ["| Shape (m × k × n) | Naive | Tiled | Register 128×128 | Register 64×64 | Vectorized | Double-buffered | "
+            "Split-K | cuBLAS | Default: % of cuBLAS | vs naive | % of FP32 peak |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for r in d["results"]:
         k = {x["kernel"]: x for x in r["kernels"]}
-        picked = r["register_tiled_picks"]
+        picked = r["auto_picks"]
 
         def g(name: str) -> str:
             text = f"{k[name]['gflops']['median']:,.0f}"
             return f"**{text}**" if name == picked else text
 
+        splits = r["split_k_splits"]
+        split_cell = f"{g('split_k')} ({splits} splits)" if splits > 1 else "(no split)"
         p = k[picked]
-        rows.append(f"| {r['shape']} | {r['tiles_128x128']} | {g('naive')} | {g('tiled')} | "
-                    f"{g('register_tiled_128')} | {g('register_tiled_64')} | {g('cublas')} | "
-                    f"{p['percent_of_cublas']['median']:.0f}% ({p['percent_of_cublas']['min']:.0f}–"
+        rows.append(f"| {r['shape']} | {g('naive')} | {g('tiled')} | {g('register_tiled_128')} | "
+                    f"{g('register_tiled_64')} | {g('vectorized')} | {g('double_buffered')} | {split_cell} | "
+                    f"{g('cublas')} | {p['percent_of_cublas']['median']:.0f}% ({p['percent_of_cublas']['min']:.0f}–"
                     f"{p['percent_of_cublas']['max']:.0f}) | {p['speedup_over_naive']['median']:.2f}x | "
                     f"{p['percent_of_peak_at_measured_clock']['median']:.0f}% |")
     peak = d["peak_fp32_gflops"]
-    sms = d.get("device", {}).get("sm_count", 0)
-    agree = sum(all(f == r["register_tiled_picks"] for f in r["faster_register_tile_per_run"]) for r in d["results"])
+    near = sum(all(x >= 0.97 for x in r["auto_vs_fastest_per_run"]) for r in d["results"])
     rows.append("")
-    rows.append(f"GFLOP/s = 2mnk / CUDA-event median, median across {d['runs']} runs; bold is the tile size the "
-                f"backend picks (64×64 when 128×128 tiles would keep at most three quarters of the {sms} SMs "
-                f"busy). That pick was the faster register tile in every run for {agree} of {len(d['results'])} "
-                "shapes. Every kernel, cuBLAS "
-                "included, is checked against a float64 reference within the FP32 error bound before timing; cuBLAS "
-                "runs in plain FP32 without TF32. Peak FP32 = 2 × SMs × FP32 lanes per SM × clock: "
-                f"{peak['at_max_sm_clock']:,.0f} GFLOP/s at the {peak['max_sm_clock_mhz']:.0f} MHz maximum; the "
-                "last column uses the median SM clock measured during each shape's runs. " + gpu_line(d))
+    rows.append(f"GFLOP/s = 2mnk / GPU time, median across {d['runs']} runs. Each variant's launches are timed on "
+                "the GPU alone, between event nodes captured with them into a CUDA graph, so the host's launch "
+                "overhead, which differs between cuBLAS and these kernels, is left out for all. Bold is the "
+                "backend's default: split-K where the output is too small to fill the GPU, otherwise "
+                f"double-buffered. In every run it was within 3% of the fastest of these kernels for {near} of "
+                f"{len(d['results'])} shapes. Every kernel, cuBLAS included, is checked against a float64 reference "
+                "within the FP32 error bound before timing; cuBLAS runs in plain FP32 without TF32. Peak FP32 = 2 × "
+                f"SMs × FP32 lanes per SM × clock: {peak['at_max_sm_clock']:,.0f} GFLOP/s at the "
+                f"{peak['max_sm_clock_mhz']:.0f} MHz maximum; the last column uses the median SM clock measured "
+                "during each shape's runs. " + gpu_line(d))
     return "\n".join(rows)
 
 

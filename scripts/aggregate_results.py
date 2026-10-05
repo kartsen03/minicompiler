@@ -115,14 +115,14 @@ def aggregate_gpu_matmul(runs: list[dict]) -> dict:
     results = []
     for i, first in enumerate(runs[0]["results"]):
         per_run = [r["results"][i] for r in runs]
-        entry = {k: first[k] for k in ("shape", "m", "k", "n", "tiles_128x128", "register_tiled_picks")}
+        entry = {k: first[k] for k in ("shape", "m", "k", "n", "tiles_128x128", "auto_picks", "split_k_splits")}
         entry["sm_clock_mhz_median"] = spread([p["sm_clock_mhz_median"] for p in per_run])
-        # Which register tile size was faster in each run, against the pick.
-        faster = []
+        # The default kernel's speed against the fastest of minicompiler's kernels, in each run.
+        ratios = []
         for p in per_run:
-            by_name = {x["kernel"]: x for x in p["kernels"]}
-            faster.append(max(("register_tiled_128", "register_tiled_64"), key=lambda n: by_name[n]["gflops"]))
-        entry["faster_register_tile_per_run"] = faster
+            ours = {x["kernel"]: x["gflops"] for x in p["kernels"] if x["kernel"] != "cublas"}
+            ratios.append(ours[first["auto_picks"]] / max(ours.values()))
+        entry["auto_vs_fastest_per_run"] = ratios
         kernels = []
         for j, kern in enumerate(first["kernels"]):
             agg = {"kernel": kern["kernel"]}

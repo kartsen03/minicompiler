@@ -18,10 +18,10 @@ int split_k_splits(int m, int n, int k, int sm_count);
 // one m x n slice of partial products per split for SplitK, otherwise none.
 std::size_t matmul_workspace_bytes(MatmulKernel kernel, int m, int n, int splits);
 
-// C[m,n] = A[m,k] * B[k,n], row-major float32, enqueued on `stream`. The
-// adaptive RegisterTiled must first be resolved (resolve_matmul_kernel) to
-// the kernel it runs; passed as is, it fails with cudaErrorInvalidValue.
-// SplitK reads `splits` and, when it is above 1, `workspace`.
+// C[m,n] = A[m,k] * B[k,n], row-major float32, enqueued on `stream`. Auto
+// must first be resolved (resolve_matmul_kernel) to the kernel it runs;
+// passed as is, it fails with cudaErrorInvalidValue. SplitK reads `splits`
+// and, when it is above 1, `workspace`.
 cudaError_t launch_matmul(MatmulKernel kernel, const float* a, const float* b, float* c, int m, int n, int k,
                           cudaStream_t stream, int splits = 1, float* workspace = nullptr);
 

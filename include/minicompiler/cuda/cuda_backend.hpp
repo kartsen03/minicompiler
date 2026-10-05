@@ -15,10 +15,12 @@
 
 namespace minicompiler::cuda {
 
+// The matmul kernels, in the order they were written: each step of the list
+// is one optimization over the one before, and all of them stay selectable.
 enum class MatmulKernel {
+	Auto,              // the default: SplitK where it splits K, otherwise DoubleBuffered (see below)
 	Naive,             // one thread per output element, operands read from global memory
 	Tiled,             // 32x32 tiles of A and B staged in shared memory, one output per thread
-	RegisterTiled,     // RegisterTiled128 or RegisterTiled64, whichever suits the shape (see below)
 	RegisterTiled128,  // 128x128 tiles in shared memory, an 8x8 block of outputs per thread in registers
 	RegisterTiled64,   // 64x64 tiles, a 4x4 block of outputs per thread
 	Vectorized,        // RegisterTiled128 with 128-bit global and shared-memory loads and a transposed A tile
@@ -28,20 +30,19 @@ enum class MatmulKernel {
 
 const char* matmul_kernel_name(MatmulKernel kernel);
 
-// "naive", "tiled", "register_tiled", "register_tiled_128", "register_tiled_64", "vectorized",
-// "double_buffered" or "split_k".
+// "auto", "naive", "tiled", "register_tiled_128", "register_tiled_64", "vectorized", "double_buffered" or
+// "split_k".
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name);
 
-// The kernel that computes an m x n output on a GPU with `sm_count` SMs.
-// RegisterTiled becomes RegisterTiled64 when the output's 128x128 tiles
-// would keep at most three quarters of the SMs busy, so that the output is
-// spread over every SM, and RegisterTiled128 otherwise. Every other kernel is
-// returned unchanged.
-MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int sm_count);
+// The kernel that computes an m x n x k matmul on a GPU with `sm_count` SMs.
+// Auto becomes SplitK when the output has too few 128x128 tiles to fill the
+// GPU and K is long enough to split, and DoubleBuffered otherwise. Every other
+// kernel is returned unchanged.
+MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int k, int sm_count);
 
 struct CudaOptions {
 	int device = 0;
-	MatmulKernel matmul = MatmulKernel::RegisterTiled;
+	MatmulKernel matmul = MatmulKernel::Auto;
 	// Let elementwise kernels use float4 loads and stores when the layout allows.
 	bool vectorize = true;
 };

@@ -7,16 +7,15 @@
 #include "minicompiler/runtime/memory_plan.hpp"
 
 #include <algorithm>
-#include <cstdint>
 #include <utility>
 
 namespace minicompiler::cuda {
 
 const char* matmul_kernel_name(MatmulKernel kernel) {
 	switch (kernel) {
+		case MatmulKernel::Auto: return "auto";
 		case MatmulKernel::Naive: return "naive";
 		case MatmulKernel::Tiled: return "tiled";
-		case MatmulKernel::RegisterTiled: return "register_tiled";
 		case MatmulKernel::RegisterTiled128: return "register_tiled_128";
 		case MatmulKernel::RegisterTiled64: return "register_tiled_64";
 		case MatmulKernel::Vectorized: return "vectorized";
@@ -27,25 +26,22 @@ const char* matmul_kernel_name(MatmulKernel kernel) {
 }
 
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name) {
-	for (MatmulKernel k : {MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::RegisterTiled,
+	for (MatmulKernel k : {MatmulKernel::Auto, MatmulKernel::Naive, MatmulKernel::Tiled,
 	                       MatmulKernel::RegisterTiled128, MatmulKernel::RegisterTiled64, MatmulKernel::Vectorized,
 	                       MatmulKernel::DoubleBuffered, MatmulKernel::SplitK}) {
 		if (name == matmul_kernel_name(k)) return k;
 	}
 	return Error{"unknown matmul kernel '" + name +
-	             "' (naive, tiled, register_tiled, register_tiled_128, register_tiled_64, vectorized, "
-	             "double_buffered, split_k)"};
+	             "' (auto, naive, tiled, register_tiled_128, register_tiled_64, vectorized, double_buffered, "
+	             "split_k)"};
 }
 
-MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int sm_count) {
-	if (kernel != MatmulKernel::RegisterTiled) return kernel;
-	const std::int64_t tiles = ((static_cast<std::int64_t>(m) + 127) / 128) * ((static_cast<std::int64_t>(n) + 127) / 128);
-	// Measured on outputs of 16 tiles for 30 SMs, an SM gets through about
-	// 0.8 as much work with 64x64 tiles as with one 128x128 tile. Spreading
-	// the same output over every SM therefore pays only while the 128x128
-	// tiles would keep at most three quarters of the SMs busy.
-	return 4 * tiles <= 3 * static_cast<std::int64_t>(sm_count) ? MatmulKernel::RegisterTiled64
-	                                                             : MatmulKernel::RegisterTiled128;
+MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int k, int sm_count) {
+	if (kernel != MatmulKernel::Auto) return kernel;
+	// The double-buffered kernel beats both register-tiled ones on every
+	// measured shape; splitting K adds a reduction, so it is used only where
+	// the output alone cannot fill the GPU.
+	return split_k_splits(m, n, k, sm_count) > 1 ? MatmulKernel::SplitK : MatmulKernel::DoubleBuffered;
 }
 
 namespace {
@@ -265,7 +261,7 @@ private:
 			launch.m = static_cast<int>(a[0]);
 			launch.k = static_cast<int>(a[1]);
 			launch.n = static_cast<int>(node.type.shape[1]);
-			launch.matmul = resolve_matmul_kernel(options_.matmul, launch.m, launch.n, device_.sm_count);
+			launch.matmul = resolve_matmul_kernel(options_.matmul, launch.m, launch.n, launch.k, device_.sm_count);
 			if (launch.matmul == MatmulKernel::SplitK) {
 				launch.splits = split_k_splits(launch.m, launch.n, launch.k, device_.sm_count);
 				const std::size_t bytes = matmul_workspace_bytes(launch.matmul, launch.m, launch.n, launch.splits);

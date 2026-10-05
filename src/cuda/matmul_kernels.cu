@@ -423,7 +423,7 @@ cudaError_t launch_matmul(MatmulKernel kernel, const float* a, const float* b, f
 		case MatmulKernel::Vectorized: return launch_vectorized<8, false>(a, b, c, m, n, k, stream);
 		case MatmulKernel::DoubleBuffered: return launch_vectorized<8, true>(a, b, c, m, n, k, stream);
 		case MatmulKernel::SplitK: return launch_vectorized<8, true>(a, b, c, m, n, k, stream, splits, workspace);
-		case MatmulKernel::RegisterTiled: break;  // must be resolved to a tile size first
+		case MatmulKernel::Auto: break;  // must be resolved to a kernel first
 	}
 	return cudaErrorInvalidValue;
 }
