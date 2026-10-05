@@ -273,7 +273,10 @@ int run_elementwise(const std::string& graph_dir, const std::string& out_path, d
 struct MatmulVariant {
 	std::string name;
 	std::function<void(cudaStream_t)> run;
-	std::vector<double> samples_ms;
+	std::vector<double> samples_ms;  // GPU time per replay of `exec`
+	cudaGraphExec_t exec = nullptr;  // the launches, between the event nodes `start` and `stop`
+	cudaEvent_t start = nullptr;
+	cudaEvent_t stop = nullptr;
 };
 
 // Checks `c` against a float64 dot product on `samples` random elements: a
@@ -312,6 +315,12 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 	// Plain FP32: no TF32 tensor cores (NVIDIA_TF32_OVERRIDE=0 is also set in
 	// main), so cuBLAS does the same arithmetic as the hand-written kernels.
 	CHECK_CUBLAS(cublasSetMathMode(handle, CUBLAS_DEFAULT_MATH));
+	// A workspace of cuBLAS's own, so it never allocates while being captured
+	// into a CUDA graph.
+	constexpr std::size_t kCublasWorkspace = 32u << 20;
+	void* cublas_workspace;
+	CHECK_CUDA(cudaMalloc(&cublas_workspace, kCublasWorkspace));
+	CHECK_CUBLAS(cublasSetWorkspace(handle, cublas_workspace, kCublasWorkspace));
 
 	const double max_clock = device.max_sm_clock_mhz > 0 ? device.max_sm_clock_mhz : device.sm_clock_mhz;
 	const double peak_at_max_clock = device.peak_fp32_gflops(max_clock);
@@ -339,10 +348,13 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 	json.begin_object();
 	json.field("benchmark", "FP32 matmul C[m,n] = A[m,k] B[k,n] (row-major): naive, shared-memory tiled and "
 	                        "register-tiled (128x128 and 64x64 tiles) kernels against cuBLAS");
-	json.field("method", "CUDA events around each kernel on one stream; 3 warmup runs per variant and warm-up "
-	                     "rounds until the GPU has been busy for warmup_seconds, then interleaved rounds (rotating "
-	                     "order); time = median over rounds; GFLOP/s = 2mnk / time; ratios are "
-	                     "medians over rounds of per-round ratios. Each kernel's result is checked on 1000 sampled "
+	json.field("method", "GPU time of each variant's launches, from event-record nodes captured with them into a "
+	                     "CUDA graph and replayed on one stream, so host-side launch overhead (which differs between "
+	                     "cuBLAS and these kernels) is left out for all; 3 warmup "
+	                     "runs per variant and warm-up rounds until the GPU has been busy for warmup_seconds, then "
+	                     "interleaved rounds (rotating order); time = median over rounds; GFLOP/s = 2mnk / time; "
+	                     "ratios are medians over rounds of per-round ratios. Each kernel's result is checked on 1000 "
+	                     "sampled "
 	                     "elements against a float64 dot product within the FP32 error bound. cuBLAS runs in "
 	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores). "
 	                     "register_tiled_picks is the tile size the backend's register_tiled kernel uses for the "
@@ -407,16 +419,28 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 			}
 		}
 
-		cudaEvent_t start, stop;
-		CHECK_CUDA(cudaEventCreate(&start));
-		CHECK_CUDA(cudaEventCreate(&stop));
-		auto once = [&](MatmulVariant& v) {
-			CHECK_CUDA(cudaEventRecord(start, stream));
+		// Each variant's launches are captured into a CUDA graph between two
+		// event-record nodes. Replaying the graph runs start event, kernels and
+		// stop event back to back on the GPU, so the time between the events is
+		// GPU execution alone: the host-side cost of launching, which differs
+		// between cuBLAS and these kernels, is left out for all of them.
+		for (MatmulVariant& v : variants) {
+			CHECK_CUDA(cudaEventCreate(&v.start));
+			CHECK_CUDA(cudaEventCreate(&v.stop));
+			cudaGraph_t graph;
+			CHECK_CUDA(cudaStreamBeginCapture(stream, cudaStreamCaptureModeThreadLocal));
+			CHECK_CUDA(cudaEventRecordWithFlags(v.start, stream, cudaEventRecordExternal));
 			v.run(stream);
-			CHECK_CUDA(cudaEventRecord(stop, stream));
-			CHECK_CUDA(cudaEventSynchronize(stop));
+			CHECK_CUDA(cudaEventRecordWithFlags(v.stop, stream, cudaEventRecordExternal));
+			CHECK_CUDA(cudaStreamEndCapture(stream, &graph));
+			CHECK_CUDA(cudaGraphInstantiate(&v.exec, graph, 0));
+			CHECK_CUDA(cudaGraphDestroy(graph));
+		}
+		auto once = [&](MatmulVariant& v) {
+			CHECK_CUDA(cudaGraphLaunch(v.exec, stream));
+			CHECK_CUDA(cudaEventSynchronize(v.stop));
 			float ms = 0;
-			CHECK_CUDA(cudaEventElapsedTime(&ms, start, stop));
+			CHECK_CUDA(cudaEventElapsedTime(&ms, v.start, v.stop));
 			return static_cast<double>(ms);
 		};
 		for (MatmulVariant& v : variants) {
@@ -436,8 +460,11 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 			}
 			clocks.push_back(cuda::current_sm_clock_mhz(0));  // sampled under load
 		}
-		CHECK_CUDA(cudaEventDestroy(start));
-		CHECK_CUDA(cudaEventDestroy(stop));
+		for (MatmulVariant& v : variants) {
+			CHECK_CUDA(cudaGraphExecDestroy(v.exec));
+			CHECK_CUDA(cudaEventDestroy(v.start));
+			CHECK_CUDA(cudaEventDestroy(v.stop));
+		}
 
 		auto paired = [&](const MatmulVariant& num, const MatmulVariant& den) {
 			std::vector<double> r;
@@ -486,6 +513,7 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 	bench::write_device(json, device, clocks);
 	json.end_object();
 	CHECK_CUBLAS(cublasDestroy(handle));
+	CHECK_CUDA(cudaFree(cublas_workspace));
 	CHECK_CUDA(cudaStreamDestroy(stream));
 
 	std::ofstream out(out_path, std::ios::binary);
