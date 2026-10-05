@@ -29,9 +29,10 @@ const char* matmul_kernel_name(MatmulKernel kernel);
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name);
 
 // The kernel that computes an m x n output on a GPU with `sm_count` SMs.
-// RegisterTiled becomes RegisterTiled64 when the output has fewer 128x128
-// tiles than the GPU has SMs, so that no SM sits idle, and RegisterTiled128
-// otherwise. Every other kernel is returned unchanged.
+// RegisterTiled becomes RegisterTiled64 when the output's 128x128 tiles
+// would keep at most three quarters of the SMs busy, so that the output is
+// spread over every SM, and RegisterTiled128 otherwise. Every other kernel is
+// returned unchanged.
 MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int sm_count);
 
 struct CudaOptions {

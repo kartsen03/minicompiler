@@ -166,17 +166,19 @@ TEST(CudaBackend, MatmulKernelNamesRoundTrip) {
 	EXPECT_FALSE(cuda::matmul_kernel_from_name("register_tiled_32").ok());
 }
 
-TEST(CudaBackend, RegisterTiledUses64x64TilesWhen128x128WouldLeaveSmsIdle) {
+TEST(CudaBackend, RegisterTiledUses64x64TilesWhen128x128WouldLeaveAQuarterOfTheSmsIdle) {
 	using cuda::MatmulKernel;
 	auto resolve = [](int m, int n, int sms) {
 		return cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled, m, n, sms);
 	};
 	EXPECT_EQ(resolve(512, 512, 30), MatmulKernel::RegisterTiled64);     // 4 x 4 = 16 tiles for 30 SMs
 	EXPECT_EQ(resolve(128, 2048, 30), MatmulKernel::RegisterTiled64);    // 1 x 16
-	EXPECT_EQ(resolve(640, 640, 30), MatmulKernel::RegisterTiled64);     // 25
+	EXPECT_EQ(resolve(256, 1408, 30), MatmulKernel::RegisterTiled64);    // 22: 88 <= 90, the last one
+	EXPECT_EQ(resolve(128, 2944, 30), MatmulKernel::RegisterTiled128);   // 23: 92 > 90
+	EXPECT_EQ(resolve(640, 640, 30), MatmulKernel::RegisterTiled128);    // 25 keeps 83% of the SMs busy
 	EXPECT_EQ(resolve(640, 768, 30), MatmulKernel::RegisterTiled128);    // 30: one tile per SM
 	EXPECT_EQ(resolve(1000, 1000, 30), MatmulKernel::RegisterTiled128);  // 64, edge tiles count
-	EXPECT_EQ(resolve(640, 640, 25), MatmulKernel::RegisterTiled128);    // fewer SMs, same shape
+	EXPECT_EQ(resolve(640, 640, 40), MatmulKernel::RegisterTiled64);     // more SMs, same shape
 	EXPECT_EQ(resolve(std::numeric_limits<int>::max(), 1, 30), MatmulKernel::RegisterTiled128);  // m + 127 overflows int
 	// Any other kernel is left alone.
 	EXPECT_EQ(cuda::resolve_matmul_kernel(MatmulKernel::RegisterTiled128, 1, 1, 30), MatmulKernel::RegisterTiled128);

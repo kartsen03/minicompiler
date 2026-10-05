@@ -345,7 +345,8 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 	                     "elements against a float64 dot product within the FP32 error bound. cuBLAS runs in "
 	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores). "
 	                     "register_tiled_picks is the tile size the backend's register_tiled kernel uses for the "
-	                     "shape: 64x64 when the output has fewer 128x128 tiles than the GPU has SMs");
+	                     "shape: 64x64 when the output's 128x128 tiles would keep at most three quarters of the "
+	                     "SMs busy");
 	json.field("warmup_seconds", warmup_seconds).field("seconds_per_config", seconds);
 	bench::write_environment(json);
 	json.key("peak_fp32_gflops").begin_object();

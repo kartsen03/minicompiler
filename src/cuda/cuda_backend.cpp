@@ -35,7 +35,12 @@ Result<MatmulKernel> matmul_kernel_from_name(const std::string& name) {
 MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int sm_count) {
 	if (kernel != MatmulKernel::RegisterTiled) return kernel;
 	const std::int64_t tiles = ((static_cast<std::int64_t>(m) + 127) / 128) * ((static_cast<std::int64_t>(n) + 127) / 128);
-	return tiles < sm_count ? MatmulKernel::RegisterTiled64 : MatmulKernel::RegisterTiled128;
+	// Measured on outputs of 16 tiles for 30 SMs, an SM gets through about
+	// 0.8 as much work with 64x64 tiles as with one 128x128 tile. Spreading
+	// the same output over every SM therefore pays only while the 128x128
+	// tiles would keep at most three quarters of the SMs busy.
+	return 4 * tiles <= 3 * static_cast<std::int64_t>(sm_count) ? MatmulKernel::RegisterTiled64
+	                                                             : MatmulKernel::RegisterTiled128;
 }
 
 namespace {
