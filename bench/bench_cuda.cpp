@@ -64,14 +64,20 @@ void must(const Status& st, const char* what) {
 	}
 }
 
-// Bytes each kernel reads and writes, summed over the compiled program:
-// every non-scalar operand once and the output once. Scalars stay in cache.
+// Bytes each kernel must read and write, summed over the compiled program:
+// every distinct non-scalar operand once (x * x reads x from memory once)
+// and the output once. Scalars stay in cache.
 double bytes_moved(const Graph& g) {
 	double bytes = 0;
 	for (const Node& n : g.nodes()) {
 		if (!is_compute(n.op)) continue;
 		bytes += static_cast<double>(n.type.size_bytes());
-		for (NodeId in : n.inputs) {
+		for (std::size_t i=0; i<n.inputs.size(); ++i) {
+			const NodeId in = n.inputs[i];
+			if (std::find(n.inputs.begin(), n.inputs.begin() + static_cast<std::ptrdiff_t>(i), in) !=
+			    n.inputs.begin() + static_cast<std::ptrdiff_t>(i)) {
+				continue;  // the same tensor again
+			}
 			const TensorType& t = g.node(in).type;
 			if (t.num_elements() > 1) bytes += static_cast<double>(t.size_bytes());
 		}
