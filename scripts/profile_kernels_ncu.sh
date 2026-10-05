@@ -15,7 +15,13 @@
 # which WSL wipes when the distribution stops) and can be opened in the Nsight
 # Compute GUI; they are not committed.
 #
+# A hot GPU can slow below the locked clock, and ncu_summary.py then names the
+# workloads that ran slow. LABELS="label ..." profiles just those again,
+# keeping every other report; each report records the commit it was taken at,
+# and environment.txt lists them.
+#
 #   scripts/profile_kernels_ncu.sh
+#   LABELS="matmul_2048x2048x2048.split_k" scripts/profile_kernels_ncu.sh
 set -euo pipefail
 cd "$(dirname "$0")/.."
 BUILD_DIR=${BUILD_DIR:-build}
@@ -25,10 +31,15 @@ DOCS=docs/profiling/gpu/ncu
 
 cmake --build "$BUILD_DIR" -j "$(nproc)" --target bench_cuda > /dev/null
 BENCH="$BUILD_DIR/bench/bench_cuda"
-rm -rf "$OUT_DIR"
+COMMIT="$(git rev-parse --short HEAD)$(git diff --quiet -- . ':!results' ':!docs' || echo -dirty)"
+if [ -z "${LABELS:-}" ]; then
+    rm -rf "$OUT_DIR"
+    LABELS=$("$BENCH" --suite profile --list)
+fi
 mkdir -p "$OUT_DIR" "$DOCS"
-for label in $("$BENCH" --suite profile --list); do
+for label in $LABELS; do
     echo "profiling $label"
+    echo "$COMMIT" > "$OUT_DIR/$label.commit"
     ncu --set full --nvtx --nvtx-include "$label/" --force-overwrite --export "$OUT_DIR/$label" \
         "$BENCH" --suite profile --only "$label" > "$OUT_DIR/$label.log" 2>&1 || {
         tail -20 "$OUT_DIR/$label.log"
@@ -40,6 +51,6 @@ done
 {
     echo "ncu: $(ncu --version | tail -1)"
     echo "GPU: $(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader)"
-    echo "commit: $(git rev-parse --short HEAD)$(git diff --quiet -- . ':!results' ':!docs' || echo -dirty)"
+    echo "commit: $(sort -u "$OUT_DIR"/*.commit | paste -sd ' ')"
 } > "$DOCS/environment.txt"
 echo "wrote $DOCS"
