@@ -7,7 +7,10 @@ program, builds a DAG intermediate representation, optimizes it with
 dead-node elimination, constant folding and elementwise operator fusion,
 plans buffer reuse from value lifetimes, and executes the result on an
 Eigen-based CPU backend or a CUDA backend that generates one kernel per
-fused group.
+fused group. On the GPU, matmuls run hand-written kernels, from a naive one
+up to double-buffered and split-K FP32 kernels plus opt-in TF32, BF16 and
+FP16 tensor-core ones, each step measured against cuBLAS and profiled with
+Nsight Compute ([results](#results-the-cuda-backend)).
 
 ```mermaid
 flowchart LR
