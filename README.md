@@ -266,11 +266,13 @@ Measured on an RTX 3060 Laptop GPU (30 SMs, compute capability 8.6, a
 192-bit memory bus at 7001 MHz, all queried at run time) under WSL2 with the
 Windows "Turbo" power plan, by
 [`scripts/run_gpu_benchmarks.sh`](scripts/run_gpu_benchmarks.sh): three runs
-of each benchmark, every variant timed in interleaved rounds with CUDA events,
-the tables showing the median across runs and the range. Peaks come from the
-device's own properties at run time, not a spec sheet. A laptop GPU's clock
-follows its power and temperature, so each table also records the SM clock
-sampled during the runs.
+of each benchmark, every variant timed in interleaved rounds in a shuffled
+order, the tables showing the median across runs and the range. Peaks come
+from the device's own properties at run time, not a spec sheet. A laptop
+GPU's clock follows its power and temperature, so the tables also record the
+SM clock sampled during the runs: it falls from about 1.8 GHz on the small
+matmuls to 0.9 GHz on the largest, which run long enough to reach the power
+limit.
 
 ### Fusion on the GPU
 
@@ -281,65 +283,134 @@ folding) and with it (one kernel), inputs already on the device
 <!-- BEGIN gpu-elementwise -->
 | GELU chain size | Unfused: kernels, time, bandwidth (% of peak) | Fused: time, bandwidth (% of peak) | Fused speedup (range over runs) |
 |---|---:|---:|---:|
-| 1x4096 (16 KB) | 9 kernels, 0.059 ms, 6 GB/s (2%) | 0.0082 ms, 4 GB/s (1%) | 6.10x (5.98–6.96) |
-| 16x4096 (256 KB) | 9 kernels, 0.120 ms, 46 GB/s (14%) | 0.017 ms, 30 GB/s (9%) | 7.00x (7.00–7.12) |
-| 256x4096 (4 MB) | 9 kernels, 0.370 ms, 238 GB/s (71%) | 0.039 ms, 216 GB/s (64%) | 9.24x (9.22–9.33) |
-| 1024x4096 (16 MB) | 9 kernels, 1.14 ms, 308 GB/s (92%) | 0.115 ms, 293 GB/s (87%) | 10.02x (10.00–10.12) |
-| 4096x4096 (64 MB) | 9 kernels, 4.49 ms, 314 GB/s (93%) | 0.434 ms, 309 GB/s (92%) | 10.36x (10.36–10.38) |
-| 16384x4096 (256 MB) | 9 kernels, 18.0 ms, 314 GB/s (93%) | 1.71 ms, 313 GB/s (93%) | 10.49x (10.49–10.50) |
+| 1x4096 (16 KB) | 9 kernels, 0.090 ms, 4 GB/s (1%) | 0.010 ms, 3 GB/s (1%) | 5.67x (5.64–5.84) |
+| 16x4096 (256 KB) | 9 kernels, 0.138 ms, 40 GB/s (12%) | 0.017 ms, 30 GB/s (9%) | 9.11x (7.31–9.17) |
+| 256x4096 (4 MB) | 9 kernels, 0.369 ms, 239 GB/s (71%) | 0.039 ms, 216 GB/s (64%) | 9.42x (9.33–9.50) |
+| 1024x4096 (16 MB) | 9 kernels, 1.15 ms, 306 GB/s (91%) | 0.115 ms, 293 GB/s (87%) | 10.08x (10.08–10.15) |
+| 4096x4096 (64 MB) | 9 kernels, 4.52 ms, 312 GB/s (93%) | 0.435 ms, 308 GB/s (92%) | 10.37x (10.36–10.39) |
+| 16384x4096 (256 MB) | 9 kernels, 18.0 ms, 313 GB/s (93%) | 1.72 ms, 311 GB/s (93%) | 10.47x (10.45–10.50) |
 
-Times are CUDA-event medians with the input already on the device, over 3 runs (median across runs). Bandwidth counts the bytes each kernel must read and write once; peak = 2 × memory clock × bus width = 336 GB/s, from the device properties. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 210–2025 MHz (median 1425); CUDA runtime 13.1, driver API 13.1; host compiler: gcc 13.3.0; Windows power plan: Turbo; commit 3b6c819.
+Times are CUDA-event medians with the input already on the device, over 3 runs (median across runs). Bandwidth counts the bytes each kernel must read and write once; peak = 2 × memory clock × bus width = 336 GB/s, from the device properties. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 210–2017 MHz (median 1425); CUDA runtime 13.1, driver API 13.1; host compiler: gcc 13.3.0; Windows power plan: Turbo; commit bcf8b0a.
 <!-- END gpu-elementwise -->
 
-From 16 MB up the fused kernel is 10.0–10.5x faster, and from 64 MB up both
+From 16 MB up the fused kernel is 10.1–10.5x faster, and from 64 MB up both
 versions run at 92–93% of the peak bandwidth: each is as fast as DRAM allows.
 The unfused chain makes 21 passes over tensors the size of the input (each op
 reads its operands and writes its result), the fused kernel 2 (read `x`,
 write `y`), so the speedup is the traffic fusion removes. At 16 KB and
 256 KB a kernel is mostly launch overhead, and fusing nine launches into one
-gives 6.1–7.0x.
+gives 5.7–9.1x.
 
 ### Matmul kernels against cuBLAS
 
-<!-- BEGIN gpu-matmul -->
-| Shape (m × k × n) | 128×128 tiles | Naive | Tiled | Register 128×128 | Register 64×64 | cuBLAS | Picked tile: % of cuBLAS | vs naive | % of FP32 peak |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 512^3 | 16 | 827 | 1,016 | 2,064 | **2,241** | 3,277 | 67% (63–73) | 2.72x | 16% |
-| 640^3 | 25 | 800 | 955 | **2,960** | 2,768 | 4,236 | 69% (68–82) | 3.69x | 22% |
-| 1024^3 | 64 | 710 | 823 | **2,785** | 2,330 | 6,150 | 48% (44–48) | 3.93x | 24% |
-| 2048^3 | 256 | 658 | 765 | **3,745** | 2,653 | 6,612 | 58% (58–59) | 5.74x | 35% |
-| 4096^3 | 1024 | 510 | 752 | **4,191** | 2,431 | 5,802 | 72% (68–74) | 7.82x | 43% |
-| 1000^3 (not a tile multiple) | 64 | 701 | 757 | **2,625** | 2,225 | 5,711 | 44% (44–45) | 3.77x | 23% |
-| 1023x1029x1031 (odd) | 72 | 662 | 736 | **2,642** | 2,234 | 5,361 | 49% (48–55) | 3.98x | 24% |
-| 256x1024x1024 (matmul_bias_relu) | 16 | 755 | 876 | 1,771 | **1,893** | 4,520 | 45% (42–48) | 2.51x | 15% |
-| 128x512x2048 (MLP layer 1, B=128) | 16 | 779 | 907 | 1,809 | **1,886** | 2,759 | 68% (63–73) | 2.42x | 14% |
-| 128x2048x512 (MLP layer 2, B=128) | 4 | 755 | 732 | 496 | **566** | 3,361 | 18% (16–19) | 0.75x | 4% |
-| 512x2048x512 (MLP layer 2, B=512) | 16 | 722 | 840 | 1,679 | **1,830** | 5,668 | 32% (31–34) | 2.55x | 15% |
+Every kernel of the ladder on the same shapes, in GFLOP/s, against cuBLAS's
+FP32 SGEMM:
 
-GFLOP/s = 2mnk / CUDA-event median, median across 3 runs; bold is the tile size the backend picks (64×64 when 128×128 tiles would keep at most three quarters of the 30 SMs busy). That pick was the faster register tile in every run for 11 of 11 shapes. Every kernel, cuBLAS included, is checked against a float64 reference within the FP32 error bound before timing; cuBLAS runs in plain FP32 without TF32. Peak FP32 = 2 × SMs × FP32 lanes per SM × clock: 16,128 GFLOP/s at the 2100 MHz maximum; the last column uses the median SM clock measured during each shape's runs. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 900–1987 MHz (median 1770); CUDA runtime 13.1, driver API 13.1; host compiler: gcc 13.3.0; Windows power plan: Turbo; commit 3b6c819.
+<!-- BEGIN gpu-matmul -->
+| Shape (m × k × n) | Naive | Tiled | Register 128×128 | Register 64×64 | Vectorized | Double-buffered | Split-K | cuBLAS | Default: % of cuBLAS | vs naive | % of FP32 peak | SM clock |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 512^3 | 802 | 986 | 1,961 | 2,166 | 3,084 | 3,591 | **4,464** (3 splits) | 4,681 | 95% (93–102) | 5.62x | 32% | 1,807 MHz |
+| 640^3 | 753 | 903 | 2,522 | 2,512 | 4,267 | **5,339** | (no split) | 5,128 | 104% (102–104) | 7.08x | 42% | 1,650 MHz |
+| 1024^3 | 673 | 785 | 2,640 | 2,236 | 4,161 | **4,462** | (no split) | 5,858 | 75% (75–76) | 6.67x | 40% | 1,447 MHz |
+| 2048^3 | 631 | 710 | 3,576 | 2,517 | 5,541 | **5,674** | (no split) | 6,081 | 93% (93–93) | 9.01x | 57% | 1,290 MHz |
+| 4096^3 | 494 | 735 | 2,769 | 1,968 | 4,020 | **4,178** | (no split) | 4,610 | 88% (76–91) | 8.96x | 58% | 930 MHz |
+| 1000^3 (not a tile multiple) | 662 | 721 | 2,488 | 2,125 | 3,914 | **4,295** | (no split) | 5,645 | 76% (76–76) | 6.52x | 39% | 1,417 MHz |
+| 1023x1029x1031 (odd) | 648 | 723 | 2,571 | 2,189 | 3,712 | **4,077** | (no split) | 5,195 | 78% (77–78) | 6.31x | 38% | 1,387 MHz |
+| 256x1024x1024 (matmul_bias_relu) | 725 | 842 | 1,675 | 1,846 | 2,819 | 3,472 | **4,900** (3 splits) | 4,681 | 105% (102–108) | 6.72x | 39% | 1,627 MHz |
+| 128x512x2048 (MLP layer 1, B=128) | 760 | 883 | 1,662 | 1,873 | 2,731 | 3,502 | **4,369** (3 splits) | 3,717 | 107% (103–114) | 5.77x | 33% | 1,732 MHz |
+| 128x2048x512 (MLP layer 2, B=128) | 741 | 720 | 472 | 559 | 797 | 1,032 | **5,350** (7 splits) | 3,652 | 145% (144–153) | 7.25x | 38% | 1,837 MHz |
+| 512x2048x512 (MLP layer 2, B=512) | 705 | 822 | 1,644 | 1,814 | 2,781 | 3,416 | **5,147** (3 splits) | 5,699 | 89% (89–89) | 7.35x | 43% | 1,567 MHz |
+
+GFLOP/s = 2mnk / GPU time, median across 3 runs. Each variant's launches are timed on the GPU alone, between event nodes captured with them into a CUDA graph, so the host's launch overhead, which differs between cuBLAS and these kernels, is left out for all. Bold is the backend's default: split-K where the output is too small to fill the GPU, otherwise double-buffered. In every run it was within 3% of the fastest of the other kernels for 11 of 11 shapes (split-K that does not split is the double-buffered kernel itself, so it does not count). Every kernel, cuBLAS included, is checked against a float64 reference within the FP32 error bound before timing; cuBLAS runs in plain FP32 without TF32. Peak FP32 = 2 × SMs × FP32 lanes per SM × clock: 16,128 GFLOP/s at the 2100 MHz maximum. The SM clock is the median measured during each shape's runs, and the column before it uses it: the laptop's GPU slows under the sustained load of the large shapes. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 900–1980 MHz (median 1725); CUDA runtime 13.1, driver API 13.1; host compiler: gcc 13.3.0; Windows power plan: Turbo; commit bcf8b0a.
 <!-- END gpu-matmul -->
 
-Each kernel captures more data reuse than the last:
+Each kernel removes the bottleneck that the
+[Nsight Compute profile](docs/profiling/gpu/ncu/README.md) found in the one
+before it (ratios between the medians above):
 
-- **32×32 shared-memory tiles** are only 1.08–1.49x faster than the naive
-  kernel here. Ampere's L1 and L2 caches already catch much of the reuse the
-  naive kernel misses, and the tiled kernel still does two shared-memory
-  loads per multiply-add, so shared memory becomes its limit.
-- **Register tiling** keeps an 8×8 (or 4×4) block of outputs per thread in
-  registers, for 4 (or 2) multiply-adds per shared-memory load: 2.4–7.8x
-  faster than naive on every shape but one, and 44–72% of cuBLAS on the
-  square and odd shapes. At 4096³ that is 4,191 GFLOP/s, 43% of peak FP32 at
-  the measured clock, where cuBLAS reaches 60%.
-- **64×64 tiles** beat 128×128 by 4–14% on the five shapes with 16 or fewer
-  128×128 tiles, by spreading the work over all 30 SMs.
+- **32×32 shared-memory tiles** are only 1.09–1.23x faster than the naive
+  kernel on most shapes: Ampere's L1 already catches much of the reuse the
+  naive kernel misses, and the tiled kernel needs two shared-memory loads per
+  multiply-add, so shared-memory issue becomes its limit.
+- **Register tiling** (an 8×8 block of outputs per thread, four multiply-adds
+  per shared-memory load) is 1.9–5.0x faster than the tiled kernel on every
+  shape with more than 4 output tiles. Its 64×64 version, with four times the
+  blocks, is 10–18% faster on the shapes with 16 or fewer 128×128 tiles,
+  level at 640³ (25 tiles), and 15–30% slower on the larger ones.
+- **128-bit loads** from global and shared memory, with a transposed A tile
+  and a thread layout that keeps them free of bank conflicts, are 1.44–1.69x
+  faster than the 128×128 register-tiled kernel on every shape: per 64
+  multiply-adds a thread issues 4 shared-memory loads instead of 16.
+- **Double buffering** (the next tile's loads issued before the current
+  tile's multiply-adds) gains 1.02–1.04x at 2048³ and 4096³, where every SM
+  holds two blocks and one block's multiply-adds already cover the other's
+  loads, and 1.07–1.30x on the smaller outputs, where many SMs hold one.
+- **Split-K** gives small outputs enough blocks to fill the GPU: 1.24–1.51x
+  over the double-buffered kernel on the 16-tile shapes, and 5.2x on the B=128
+  MLP's second layer, whose 4 output tiles otherwise leave 26 of the 30 SMs
+  idle.
 
-The weak spot is the B=128 MLP's second layer (128×2048×512): 4 tiles of
-128×128, or 16 of 64×64, for 30 SMs, so most of the GPU idles and even the
-naive kernel, with 256 blocks, is faster. cuBLAS is 5.9x faster there; in the
-[profile](#where-the-time-goes) of the same layer inside PyTorch it runs a
-kernel that splits K four ways. Elsewhere cuBLAS's lead comes from
-double-buffered loads that overlap memory and math, wider loads and stores,
-and per-shape kernel selection.
+The default (bold) is 5.6–9.0x faster than the naive kernel. It reaches
+75–104% of cuBLAS on the square and odd shapes, and 89–145% on the four
+MLP-layer and `matmul_bias_relu` shapes, three of which it runs faster than
+cuBLAS, most of all the B=128 layer. Its weakest shapes are 1000³, 1024³ and
+the odd 1023×1029×1031 (75–78%): 64 to 72 tiles of 128×128 for the 60
+blocks the GPU holds at once (two per SM), so a few blocks run as a second
+wave on an otherwise idle GPU.
+
+### Tensor cores
+
+The three tensor-core kernels against cuBLAS on the same FP32 matrices with
+the same input format, through `cublasGemmEx` with
+`CUBLAS_COMPUTE_32F_FAST_TF32`, `_FAST_16BF` and `_FAST_16F` (which also round
+the inputs to the format and accumulate in FP32), and both against FP32
+([`bench_cuda --suite tensor_core`](bench/bench_cuda.cpp)), in TFLOP/s:
+
+<!-- BEGIN gpu-tensor-core -->
+| Shape (m × k × n) | FP32: default / cuBLAS | TF32: ours / cuBLAS (ours as % of cuBLAS) | BF16: ours / cuBLAS (ours as % of cuBLAS) | FP16: ours / cuBLAS (ours as % of cuBLAS) | SM clock |
+|---|---:|---:|---:|---:|---:|
+| 1024^3 | 4.9 / 6.3 | 5.7 / 6.8 (82%) | 9.0 / 11.2 (79%) | 10.4 / 11.2 (92%) | 1,575 MHz |
+| 2048^3 | 5.4 / 5.7 | 6.5 / 8.7 (74%) | 10.0 / 14.9 (67%) | 11.7 / 14.7 (80%) | 1,252 MHz |
+| 4096^3 | 4.0 / 4.4 | 4.9 / 6.5 (76%) | 7.6 / 12.3 (63%) | 9.0 / 12.5 (72%) | 900 MHz |
+| 1000^3 (not a tile multiple) | 4.8 / 6.1 | 5.4 / 6.3 (82%) | 8.5 / 10.5 (78%) | 9.8 / 10.4 (91%) | 1,582 MHz |
+| 1023x1029x1031 (odd) | 4.5 / 5.7 | 4.6 / 7.2 (64%) | 6.9 / 10.2 (68%) | 7.8 / 9.2 (85%) | 1,515 MHz |
+| 256x1024x1024 (matmul_bias_relu) | 4.6 / 4.3 | 5.0 / 5.4 (92%) | 6.2 / 7.1 (82%) | 7.1 / 8.9 (80%) | 1,507 MHz |
+| 128x512x2048 (MLP layer 1, B=128) | 3.2 / 2.9 | 3.5 / 4.2 (83%) | 4.5 / 6.1 (76%) | 5.0 / 5.8 (84%) | 1,740 MHz |
+| 128x2048x512 (MLP layer 2, B=128) | 3.7 / 2.6 | 3.9 / 4.1 (91%) | 5.2 / 5.3 (100%) | 5.8 / 5.2 (110%) | 1,725 MHz |
+| 512x2048x512 (MLP layer 2, B=512) | 5.6 / 6.1 | 6.3 / 7.9 (79%) | 7.4 / 11.0 (67%) | 8.6 / 9.9 (86%) | 1,717 MHz |
+
+| Inputs rounded to | Unit roundoff | Largest \|c − exact\| / Σ\|ab\|, ours | cuBLAS |
+|---|---:|---:|---:|
+| FP32 (no rounding) | 2^-24 | 1.75e-07 | 1.53e-07 |
+| TF32 | 2^-11 | 5.59e-05 | 5.59e-05 |
+| BF16 | 2^-8 | 3.70e-04 | 3.70e-04 |
+| FP16 | 2^-11 | 5.62e-05 | 5.62e-05 |
+
+TFLOP/s = 2mnk / GPU time, median across 3 runs, timed as in the FP32 table; the percentage is the median over rounds of cuBLAS time / our time. Our kernels and cuBLAS get the same FP32 matrices: cuBLAS through cublasGemmEx with CUBLAS_COMPUTE_32F_FAST_TF32, _FAST_16BF or _FAST_16F, which round the inputs to the format and accumulate in FP32, as ours do. Errors are the largest over 1000 sampled elements of every shape, against a float64 dot product; every variant is also checked against its format's error bound. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 900–1987 MHz (median 1597); CUDA runtime 13.1, driver API 13.1; host compiler: gcc 13.3.0; Windows power plan: Turbo; commit bcf8b0a.
+<!-- END gpu-tensor-core -->
+
+What it shows:
+
+- **Each format costs the accuracy its unit roundoff predicts, in these
+  kernels and in cuBLAS alike.** The largest error relative to Σ|ab| is the
+  same in both for every format: 5.6e-5 for TF32 and FP16 (u = 2⁻¹¹), 3.7e-4
+  for BF16 (u = 2⁻⁸), against 1.5–1.8e-7 for FP32: about 300 and 2,000 times
+  FP32's error, which is why these kernels are opt-in.
+- **On this GPU TF32 buys little.** Nsight Compute reports a TF32 tensor
+  peak of 256 FLOP per SM per clock here, the same as the FP32 units' 128
+  lanes × 2, so TF32 can only win on efficiency: our TF32 kernel is
+  1.02–1.21x faster than the FP32 default, cuBLAS's 1.15–1.62x. FP16 and BF16
+  with FP32 accumulation peak at 512, twice FP32: our FP16 kernel is
+  1.53–2.22x faster than the FP32 default (2.15–2.22x from 1024³ to 4096³),
+  cuBLAS's 1.50–3.10x.
+- **Ours runs at 63–110% of cuBLAS in the same format**: FP16 72–110%, BF16
+  63–100%, TF32 64–92%. On the B=128 layer, where it splits K seven ways, it
+  is ahead with FP16 and level with BF16. At 2048³ Nsight Compute shows our
+  FP16 kernel's tensor pipe at 62% of its peak and cuBLAS's CUTLASS kernel's
+  at 78%, both with 8 warps per SM: cuBLAS stages FP32 tiles through a
+  three-stage pipeline and converts them after the shared-memory load, which
+  WMMA's opaque fragment layout rules out (see
+  [What I'd do next](#what-id-do-next)).
 
 ### Against PyTorch on the same GPU
 
@@ -352,33 +423,35 @@ minicompiler's to within 1.7e-6 of the output's largest magnitude.
 <!-- BEGIN gpu-torch -->
 | Graph | Size | minicompiler | PyTorch eager (same ops) | PyTorch eager (idiomatic) | torch.compile | torch.compile, CUDA graphs | SM clock |
 |---|---|---:|---:|---:|---:|---:|---:|
-| `gelu_chain` | 1x4096 (16 KB) | 0.028 ms | 0.264 ms, 7.69x (7.16–7.80) | 0.053 ms, 1.41x (1.39–1.50) | 0.203 ms, 6.12x (4.97–6.76) | 0.267 ms, 8.35x (6.37–9.16) | 300 MHz |
-| `gelu_chain` | 256x4096 (4 MB) | 0.044 ms | 0.433 ms, 9.69x (7.88–9.84) | 0.058 ms, 1.10x (1.01–1.16) | 0.201 ms, 3.62x (3.27–4.22) | 0.264 ms, 5.21x (4.62–5.62) | 885 MHz |
-| `gelu_chain` | 2048x4096 (32 MB) | 0.226 ms | 2.32 ms, 10.23x (10.20–10.28) | 0.221 ms, 0.99x (0.99–0.99) | 0.386 ms, 1.68x (1.66–1.70) | 0.644 ms, 2.78x (2.78–2.79) | 1830 MHz |
-| `gelu_chain` | 8192x4096 (128 MB) | 0.863 ms | 8.95 ms, 10.31x (10.22–10.33) | 0.860 ms, 1.00x (1.00–1.06) | 1.09 ms, 1.25x (1.21–1.32) | 1.96 ms, 2.25x (2.23–2.31) | 1560 MHz |
-| `matmul_bias_relu` | 256x1024 @ 1024x1024 | 0.387 ms | 0.188 ms, 0.52x (0.52–0.54) | 0.167 ms, 0.44x (0.44–0.48) | 0.309 ms, 0.84x (0.83–0.86) | 0.361 ms, 0.98x (0.93–1.02) | 1260 MHz |
-| `matmul_bias_relu` | 2048x1024 @ 1024x1024 | 1.36 ms | 0.812 ms, 0.60x (0.60–0.60) | 0.766 ms, 0.57x (0.57–0.57) | 0.891 ms, 0.66x (0.66–0.66) | 0.997 ms, 0.74x (0.73–0.74) | 1410 MHz |
-| `mlp_block` | B=128, 512->2048->512 | 0.647 ms | 0.490 ms, 0.75x (0.73–0.81) | 0.283 ms, 0.44x (0.42–0.46) | 0.361 ms, 0.55x (0.51–0.60) | 0.400 ms, 0.62x (0.62–0.63) | 1620 MHz |
-| `mlp_block` | B=512, 512->2048->512 | 1.01 ms | 0.902 ms, 0.87x (0.86–0.91) | 0.472 ms, 0.45x (0.44–0.47) | 0.558 ms, 0.55x (0.55–0.56) | 0.648 ms, 0.64x (0.64–0.65) | 1567 MHz |
-| `mlp_block` | B=4096, 512->2048->512 | 6.20 ms | 6.63 ms, 1.07x (1.01–1.12) | 3.70 ms, 0.59x (0.59–0.60) | 3.72 ms, 0.59x (0.59–0.60) | 3.84 ms, 0.62x (0.61–0.63) | 1132 MHz |
+| `gelu_chain` | 1x4096 (16 KB) | 0.041 ms | 0.249 ms, 7.16x (6.84–7.20) | 0.053 ms, 1.47x (1.46–1.54) | 0.193 ms, 4.34x (4.04–4.86) | 0.278 ms, 6.13x (5.73–7.26) | 382 MHz |
+| `gelu_chain` | 256x4096 (4 MB) | 0.048 ms | 0.435 ms, 9.33x (7.64–9.46) | 0.071 ms, 1.25x (1.16–1.31) | 0.184 ms, 3.24x (3.10–3.49) | 0.283 ms, 5.16x (4.71–5.62) | 1140 MHz |
+| `gelu_chain` | 2048x4096 (32 MB) | 0.223 ms | 2.32 ms, 10.35x (10.31–10.37) | 0.243 ms, 1.03x (1.03–1.06) | 0.347 ms, 1.53x (1.49–1.57) | 0.626 ms, 2.75x (2.72–2.80) | 1740 MHz |
+| `gelu_chain` | 8192x4096 (128 MB) | 0.864 ms | 8.96 ms, 10.33x (10.29–10.39) | 0.874 ms, 1.00x (0.99–1.00) | 1.01 ms, 1.15x (1.15–1.19) | 1.94 ms, 2.23x (2.21–2.27) | 1492 MHz |
+| `matmul_bias_relu` | 256x1024 @ 1024x1024 | 0.169 ms | 0.200 ms, 1.21x (1.21–1.23) | 0.173 ms, 1.06x (1.05–1.08) | 0.288 ms, 1.83x (1.80–1.98) | 0.357 ms, 2.29x (2.26–2.48) | 1170 MHz |
+| `matmul_bias_relu` | 2048x1024 @ 1024x1024 | 0.907 ms | 0.858 ms, 0.93x (0.93–0.95) | 0.831 ms, 0.91x (0.89–0.92) | 0.929 ms, 1.01x (0.99–1.04) | 1.06 ms, 1.15x (1.12–1.19) | 1320 MHz |
+| `mlp_block` | B=128, 512->2048->512 | 0.194 ms | 0.535 ms, 3.17x (2.82–3.33) | 0.316 ms, 1.86x (1.65–1.91) | 0.380 ms, 2.04x (1.89–2.12) | 0.463 ms, 2.55x (2.41–2.59) | 1117 MHz |
+| `mlp_block` | B=512, 512->2048->512 | 0.487 ms | 0.906 ms, 1.85x (1.81–1.85) | 0.477 ms, 0.97x (0.96–0.97) | 0.550 ms, 1.12x (1.12–1.13) | 0.661 ms, 1.33x (1.33–1.36) | 1537 MHz |
+| `mlp_block` | B=4096, 512->2048->512 | 5.00 ms | 7.42 ms, 1.49x (1.48–1.49) | 4.46 ms, 0.89x (0.89–0.89) | 4.40 ms, 0.88x (0.88–0.89) | 4.60 ms, 0.93x (0.92–0.93) | 900 MHz |
 
-Ratios are PyTorch time / minicompiler time (above 1 means minicompiler is faster): within each of 3 runs, the median over interleaved rounds; shown as the median across runs with the range. All variants run in one process on one CUDA stream with their inputs on the device; each call is timed with CUDA events from before the call to the end of its last kernel, so host launch overhead counts. The timer's own floor (a call that launches nothing) was 5–6 µs. The SM clock column is the median sampled during each config: a laptop GPU stays near idle clocks when the calls are tiny. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 210–2002 MHz (median 1507); CUDA runtime 13.0, driver API 13.1; PyTorch 2.14.1+cu130; PyTorch's CUDA 13.0; Triton 3.8.0; Windows power plan: Turbo; commit 3b6c819.
+Ratios are PyTorch time / minicompiler time (above 1 means minicompiler is faster): within each of 3 runs, the median over interleaved rounds; shown as the median across runs with the range. All variants run in one process on one CUDA stream with their inputs on the device; each call is timed with CUDA events from before the call to the end of its last kernel, so host launch overhead counts. The timer's own floor (a call that launches nothing) was 5–7 µs. The SM clock column is the median sampled during each config: a laptop GPU stays near idle clocks when the calls are tiny. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 210–1995 MHz (median 1372); CUDA runtime 13.0, driver API 13.1; PyTorch 2.14.1+cu130; PyTorch's CUDA 13.0; Triton 3.8.0; Windows power plan: Turbo; commit bcf8b0a.
 <!-- END gpu-torch -->
 
 What this shows:
 
 - **Elementwise graphs:** one generated kernel per fused group puts
   minicompiler level with PyTorch's own hand-written fused `F.gelu` from
-  32 MB up (0.99–1.00x) and about 10x ahead of running the graph op by op.
-  From 16 KB to 4 MB it is 1.10–1.41x ahead of `F.gelu`: one ctypes call
+  32 MB up (1.00–1.03x) and about 10x ahead of running the graph op by op.
+  From 16 KB to 4 MB it is 1.25–1.47x ahead of `F.gelu`: one ctypes call
   into C++ that launches one kernel costs less host time than PyTorch's
-  dispatch. `torch.compile` is 1.25–6.12x behind, and its kernel is not the
+  dispatch. `torch.compile` is 1.15–4.34x behind, and its kernel is not the
   reason (see the profiles below).
-- **Matmul-heavy graphs:** PyTorch wins. Idiomatic PyTorch is 1.75–2.3x
-  faster on matmul + bias + ReLU and 1.7–2.3x faster on the MLP block,
-  because cuBLAS is 1.5–5.9x faster than minicompiler's matmul kernels at
-  these shapes. Against the op-by-op eager MLP block, which launches 22
-  kernels, minicompiler is at 0.75–1.07x.
+- **Matmul-heavy graphs:** on the B=128 MLP block minicompiler is 1.86x
+  faster than idiomatic PyTorch and 2.04x faster than `torch.compile`,
+  because its split-K kernel runs the long-K second layer faster than cuBLAS
+  does. On the larger MLP blocks and the larger matmul + bias + ReLU,
+  idiomatic PyTorch is 3–12% faster (0.89–0.97x), the margin cuBLAS keeps over
+  the default kernel on large matmuls; on the smaller matmul + bias + ReLU
+  minicompiler is 1.06x ahead.
 - **CUDA graphs** don't help these one-call latencies: `reduce-overhead`
   copies every input into the graph's own buffer before replaying, which
   costs as much as a bandwidth-bound kernel.
@@ -389,38 +462,38 @@ What this shows:
 host time from kernel time:
 
 - At 32 MB, minicompiler's GELU kernel, PyTorch's `F.gelu` kernel and
-  Inductor's Triton kernel each take 214–215 µs, the time to stream 64 MB
-  through DRAM. A `torch.compile` call takes 378 µs against minicompiler's
-  250 µs: the gap is host-side overhead in the compiled function, not code
+  Inductor's Triton kernel each take 211–213 µs, the time to stream 64 MB
+  through DRAM. A `torch.compile` call takes 363 µs against minicompiler's
+  279 µs: the gap is host-side overhead in the compiled function, not code
   generation.
-- In the B=512 MLP block, minicompiler's matmuls take 315 µs and 496 µs where
-  cuBLAS takes 142–150 µs per layer. Its two fused elementwise kernels
-  (35 µs) are close to Inductor's two (30 µs) and far ahead of eager's 20
+- In the B=512 MLP block, minicompiler's matmuls take 178 µs each on average
+  where cuBLAS takes 140–148 µs per layer. Its two fused elementwise kernels
+  (34 µs) are close to Inductor's two (30 µs) and far ahead of eager's 20
   (about 450 µs).
-- At B=128, cuBLAS runs the long-K layer with `ampere_sgemm_64x32_sliced1x4`,
-  which splits K four ways inside each block: the split-K idea under
-  [What I'd do next](#what-id-do-next).
+- At B=128 minicompiler splits both layers, 3 and 7 ways: its matmuls take
+  48 µs each plus 11 µs of partial sums, against cuBLAS's 65–69 µs per layer.
 
 [Nsight Compute counters](docs/profiling/gpu/ncu) for one launch of each
 kernel (with the GPU held at its 900 MHz base clock) back the explanations
 above with measurements:
 
 - The unfused GELU chain moves 21.0 times its input through DRAM and the
-  fused kernel 2.0 times, both at 91–92% of the DRAM's peak throughput.
-- 87–89% of the naive matmul's loads hit in L1. The 32×32 tiled kernel's FMA
-  pipe is busy only 8–9% of the time; its top stall is the full queue of
-  shared-memory instructions.
-- Every register-tiled read pattern is free of bank conflicts. At 2048³ the
-  128×128 kernel keeps the FMA pipe busy 40% of the time, cuBLAS 64% at the
-  same occupancy: the difference is the issue slots the 32-bit shared-memory
-  loads take.
-- The 128×2048×512 layer's 4 blocks of 128×128 leave the GPU at 17%
-  occupancy.
+  fused kernel 2.0 times, both at 90–92% of the DRAM's peak throughput.
+- Up the FP32 ladder at 2048³ the FMA pipe is busy 8% of the time
+  (shared-memory tiles, stalled on shared-memory issue), 40% (register
+  tiling), 59% (128-bit loads) and 61% (double buffering), against cuBLAS's
+  64% at the same occupancy. No FP32 kernel has a shared-memory bank
+  conflict.
+- On the 128×2048×512 layer, split-K's 28 blocks take 94 µs where the unsplit
+  kernel's 4 take 530 µs and cuBLAS's `ampere_sgemm_64x32_sliced1x4` 119 µs.
+- At 2048³ the tensor-core kernels keep their tensor pipe 53–68% busy and
+  cuBLAS's CUTLASS kernels 78–92%, at the same or lower occupancy.
 
-<img src="docs/profiling/gpu/ncu/roofline.svg" width="640" alt="Roofline of every kernel: the GELU kernels on the DRAM roof, the matmul kernels under the FP32 roof">
+<img src="docs/profiling/gpu/ncu/roofline.svg" width="640" alt="Roofline of every kernel: the GELU kernels on the DRAM roof, the FP32 matmul kernels under the FP32 roof, the FP16 and BF16 tensor-core kernels under their tensor roof">
 
-Nsight Compute held the SM at 900 MHz, so that chart's FP32 roof (6,908
-GFLOP/s) is the peak at that clock.
+Nsight Compute held the SM at 900 MHz, so that chart's roofs are the peaks
+at that clock: 6,906 GFLOP/s for FP32 and TF32, 13,813 GFLOP/s for FP16 and
+BF16 with FP32 accumulation.
 
 ## Reproducing the GPU results on Colab
 
@@ -428,9 +501,11 @@ GFLOP/s) is the peak at that clock.
 ([open in Colab](https://colab.research.google.com/github/kartsen03/minicompiler/blob/main/notebooks/gpu_validation.ipynb))
 clones the repository at a pinned commit, builds it with the CUDA backend for
 the Colab GPU's compute capability, runs every test and fails if any GPU test
-is skipped, runs the three GPU benchmarks three times, writes
+is skipped, runs the four GPU benchmarks three times, writes
 `results/gpu/*.json` with the commit, GPU and CUDA versions, and shows the
-same tables as this README. Choose a T4 runtime, then Run all.
+same tables as this README. Choose a T4 runtime, then Run all. A T4 (compute
+capability 7.5) has FP16 tensor cores but not TF32 or BF16 ones, so its
+tensor-core table has FP16 only.
 
 ## Testing
 
@@ -439,15 +514,21 @@ behavior, compare every kernel against a double-precision reference with
 stated tolerances, and check on random graphs that optimized and unoptimized
 graphs agree. The random-graph generator tracks interval bounds so it only
 builds numerically meaningful graphs. There are 86 test cases in 20 suites
-without the CUDA backend and 99 in 21 with it; CTest also runs the example
+without the CUDA backend and 103 in 21 with it; CTest also runs the example
 program.
 
 With the CUDA backend, more tests compare the GPU with the CPU backend: every
 unary and binary op (bit for bit where IEEE arithmetic requires it, within
-8 ulp for the transcendental functions), every broadcast pattern, all five
-matmul kernels on 11 shapes that straddle the tile sizes (within the
-dot-product error bound), the benchmark graphs fused and unfused, and 200
-random graphs. They skip when no GPU is present.
+8 ulp for the transcendental functions), every broadcast pattern, the
+benchmark graphs fused and unfused, and 200 random graphs. Every FP32 matmul
+kernel runs on 14 shapes that straddle the tile sizes and the K step, within
+the dot-product error bound; split-K and the tensor-core kernels also run at
+forced split counts (more splits than K has tiles, a short last split) with
+the output prefilled with NaN, so an unwritten element fails; and each
+tensor-core format is held to its own bound. The GPU tests skip when no GPU is
+present, and so do the formats a GPU lacks; a tensor-core kernel that cannot
+run on the GPU, or that the build compiled only for older architectures, must
+fail at compile time rather than run without its body.
 
 CI builds and tests on Ubuntu with GCC, Clang, and GCC under AddressSanitizer
 and UndefinedBehaviorSanitizer, and builds the CUDA backend with CUDA 12.6
@@ -456,24 +537,24 @@ tests skip and everything else runs.
 
 ## What I'd do next
 
-- **Split-K for small outputs with a long K.** The B=128 MLP's second layer
-  (128×2048×512) has 16 64×64 tiles for 30 SMs, so even the small tiles leave
-  half the GPU idle; splitting K across blocks and summing the partial
-  products would fill it. This is the largest gap to cuBLAS in the tables
-  above.
-- **Close more of the gap to cuBLAS on large matmuls**: double-buffered tile
-  loads (`cp.async` on Ampere) so loads overlap the FMAs, 128-bit
-  shared-memory loads, and warp-level tiling; then tensor cores (TF32 or BF16
-  via `mma.sync`), stating the accuracy change.
+- **A CUTLASS-style tensor-core main loop.** cuBLAS's kernel stages FP32
+  tiles in shared memory through a three-stage `cp.async` pipeline (its 72 KB
+  of shared memory is exactly three 256×16 plus 16×128 FP32 tiles), converts
+  them in registers after the fragment load, and gives each warp a 64×64 tile.
+  WMMA hides the fragment layout, so the conversion has to happen before
+  shared memory, and a 64×64 warp tile with WMMA spilled registers here.
+  `mma.sync` and `ldmatrix`, with their documented layouts, allow both.
 - **Fuse epilogues into the matmul.** In the MLP block, bias, BatchNorm and
   GELU follow a matmul as a separate fused kernel that reads the matmul's
   output back from DRAM; applying them before the matmul kernel stores its
   tile would remove that round trip.
 - **CUDA graphs** for small graphs, where launch overhead dominates: capture
-  the launch sequence once and replay it.
-- **Autotuning instead of a fixed rule**: time the candidate tile sizes for
-  each matmul shape at compile time. The three-quarters rule is calibrated on
-  one GPU.
+  the launch sequence once and replay it. The benchmarks already time
+  matmuls this way; the backend does not run graphs yet.
+- **Autotuning instead of fixed rules.** The split-K rule (split when the
+  tiles cover less than 80% of the SMs, by how many blocks an SM holds) was
+  calibrated on one GPU; timing the candidates for each shape at compile time
+  would not need calibrating.
 - **Reductions** (softmax, LayerNorm) and fusion across them, which is where
   graph compilers find most of their gains on transformer blocks.
 
