@@ -128,6 +128,12 @@ def short(name: str) -> str:
     return name if len(name) <= 60 else name[:57] + "..."
 
 
+def time_cell(r: dict) -> str:
+    """The kernel time, with the clock it ran at when that was below the lock."""
+    text = f"{r['time_ns'] / 1e3:,.1f} µs"
+    return text + f" (at {r['sm_hz'] / 1e6:.0f} MHz)" if r.get("slow") else text
+
+
 def fmt_bytes(b: float) -> str:
     return f"{b / 2**20:,.0f} MiB" if b >= 2**20 else f"{b / 2**10:,.0f} KiB"
 
@@ -216,6 +222,15 @@ def main() -> int:
     out = ["# Nsight Compute summary", "",
            f"One launch of each kernel, full metric set, the GPU held at {sm_ghz * 1000:.0f} MHz by Nsight Compute "
            f"(FP32 peak there: {peak_flops:,.0f} GFLOP/s). See `README.md` here for what the numbers show.", ""]
+    # Nsight Compute locks the clock at the GPU's base, but a hot GPU can still
+    # slow below it; such a workload's durations are not comparable.
+    slow = [r for r in rows if r["sm_hz"] < 0.95 * sm_ghz * 1e9]
+    for r in slow:
+        r["slow"] = True
+        print(f"warning: {r['label']} ran at {r['sm_hz'] / 1e6:.0f} MHz, below the {sm_ghz * 1000:.0f} MHz lock")
+    if slow:
+        out += ["**Ran below the locked clock** (the GPU slowed below its base while hot), so their times are not "
+                "comparable: " + ", ".join(f"`{r['label']}` ({r['sm_hz'] / 1e6:.0f} MHz)" for r in slow) + ".", ""]
     gelu = {r["label"].split(".")[1]: r for r in rows if r["label"].startswith("gelu_")}
     if gelu:
         input_bytes = 4096 * 4096 * 4
@@ -226,7 +241,7 @@ def main() -> int:
             r = gelu.get(name)
             if r:
                 traffic = (r["dram_read"] + r["dram_write"]) / input_bytes
-                out.append(f"| {name} | {r['kernels']} | {r['time_ns'] / 1e3:,.0f} µs | {fmt_bytes(r['dram_read'])} | "
+                out.append(f"| {name} | {r['kernels']} | {time_cell(r)} | {fmt_bytes(r['dram_read'])} | "
                            f"{fmt_bytes(r['dram_write'])} | {traffic:.1f} | {r['dram_pct']:.0f}% |")
         out.append("")
     shapes = []
@@ -260,7 +275,7 @@ def main() -> int:
                 continue
             gflops = 2.0 * m * n * k / r["time_ns"]
             label, conflicts, st = common(name, r)
-            out.append(f"| {label} | {r['time_ns'] / 1e3:,.1f} µs | {gflops:,.0f} | {r['registers']:.0f} | "
+            out.append(f"| {label} | {time_cell(r)} | {gflops:,.0f} | {r['registers']:.0f} | "
                        f"{r['block']:.0f} × {r['grid']:.0f} | {r['occ_achieved']:.0f}% / {r['occ_theoretical']:.0f}% | "
                        f"{r['fma_pct']:.0f}% | {conflicts} | {r['l1_hit']:.0f}% | {r['l2_hit']:.0f}% | "
                        f"{r['dram_pct']:.0f}% | {st} |")
@@ -279,7 +294,7 @@ def main() -> int:
                 label, conflicts, st = common(name, r)
                 path = (f"{r['tensor_pct']:.0f}% ({r['tensor_path'].upper()} → FP32)" if r["tensor_path"]
                         else "no tensor ops")
-                out.append(f"| {label} | {r['time_ns'] / 1e3:,.1f} µs | {gflops:,.0f} | {r['registers']:.0f} | "
+                out.append(f"| {label} | {time_cell(r)} | {gflops:,.0f} | {r['registers']:.0f} | "
                            f"{r['block']:.0f} × {r['grid']:.0f} | {r['occ_achieved']:.0f}% / "
                            f"{r['occ_theoretical']:.0f}% | {path} | {conflicts} | {r['l2_hit']:.0f}% | "
                            f"{r['dram_pct']:.0f}% | {st} |")
