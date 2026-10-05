@@ -118,14 +118,16 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 	// Each side is within gamma_k * sum|a b| of the exact dot product, so they
 	// differ by at most twice that (plus each side's final rounding). The
 	// shapes straddle the 32, 64 and 128 tile sizes and the K step of 8, so
-	// the zero-padded edge tiles are exercised.
+	// the zero-padded edge tiles are exercised. Shapes with K and N multiples
+	// of 4 take the float4 paths, the rest the element-by-element ones.
 	const std::vector<std::array<std::int64_t, 3>> shapes = {
-		{1, 1, 1},       {3, 5, 7},      {1, 1000, 1},    {33, 257, 65},  {65, 9, 63},     {127, 129, 131},
-		{128, 128, 128}, {129, 13, 129}, {256, 256, 256}, {16, 4099, 16}, {513, 77, 259}};
+		{1, 1, 1},       {3, 5, 7},      {1, 1000, 1},    {33, 257, 65},  {65, 9, 63},       {127, 129, 131},
+		{128, 128, 128}, {129, 13, 129}, {256, 256, 256}, {16, 4099, 16}, {513, 77, 259},    {129, 132, 260},
+		{300, 1004, 36}, {2, 12, 4}};
 	const double u = std::ldexp(1.0, -24);
 	for (const cuda::MatmulKernel kernel :
 	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
-	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64}) {
+	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized}) {
 		cuda::CudaOptions options;
 		options.matmul = kernel;
 		for (const auto& [m, k, n] : shapes) {
@@ -158,7 +160,7 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 TEST(CudaBackend, MatmulKernelNamesRoundTrip) {
 	for (const cuda::MatmulKernel kernel :
 	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
-	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64}) {
+	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized}) {
 		Result<cuda::MatmulKernel> parsed = cuda::matmul_kernel_from_name(cuda::matmul_kernel_name(kernel));
 		ASSERT_TRUE(parsed.ok());
 		EXPECT_EQ(parsed.value(), kernel);
