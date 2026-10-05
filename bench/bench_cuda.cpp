@@ -12,7 +12,7 @@
 //
 // Every variant is compiled once, its inputs are uploaded once, and then the
 // variants are timed in interleaved rounds (one run of each per round,
-// rotating order) on one stream. Elementwise runs are bracketed by CUDA
+// shuffled order) on one stream. Elementwise runs are bracketed by CUDA
 // events; matmul runs are timed by event nodes inside a CUDA graph, which
 // leaves out host-side launch overhead (see time_graphs). Results go to
 // results/gpu/<suite>.json with the device, clocks and commit.
@@ -39,6 +39,8 @@
 #include <functional>
 #include <iostream>
 #include <map>
+#include <numeric>
+#include <random>
 #include <string>
 #include <vector>
 
@@ -100,6 +102,24 @@ struct Variant {
 	double bytes = 0;
 };
 
+// The order of the variants in each timed round: a fresh shuffle (seeded, so
+// runs repeat) rather than a rotation. Under a rotation every variant runs
+// right after the same one, and a GPU at its power limit starts each kernel
+// with the headroom its predecessor left: a heavy predecessor slows it every
+// round, which per-round ratios do not cancel.
+class RoundOrder {
+public:
+	explicit RoundOrder(std::size_t n) : order_(n) { std::iota(order_.begin(), order_.end(), std::size_t{0}); }
+	const std::vector<std::size_t>& next() {
+		std::shuffle(order_.begin(), order_.end(), rng_);
+		return order_;
+	}
+
+private:
+	std::vector<std::size_t> order_;
+	std::mt19937 rng_{20261005};
+};
+
 // A laptop GPU idles at a few hundred MHz and needs about half a second of
 // sustained work to reach its boost clock, so warm-up is measured in time:
 // keep calling `round` until `seconds` have passed.
@@ -134,9 +154,10 @@ void time_interleaved(std::vector<Variant>& variants, cudaStream_t stream, int w
 	double round_ms = 0;
 	for (Variant& v : variants) round_ms += once(v);
 	const int rounds = std::clamp(static_cast<int>(seconds * 1000.0 / std::max(round_ms, 1e-3)), 30, 5000);
+	RoundOrder order(variants.size());
 	for (int r=0; r<rounds; ++r) {
-		for (std::size_t j=0; j<variants.size(); ++j) {
-			Variant& v = variants[(j + static_cast<std::size_t>(r)) % variants.size()];
+		for (std::size_t j : order.next()) {
+			Variant& v = variants[j];
 			v.samples_ms.push_back(once(v));
 		}
 		clocks.push_back(cuda::current_sm_clock_mhz(0));
@@ -182,7 +203,7 @@ int run_elementwise(const std::string& graph_dir, const std::string& out_path, d
 	json.field("benchmark", "GELU chain on the GPU: one kernel per op (unfused) vs one fused kernel");
 	json.field("method", "CUDA events around each enqueue of the whole graph on one stream; inputs already on the "
 	                     "device; 10 warmup enqueues per variant and warm-up rounds until the GPU has been busy for "
-	                     "warmup_seconds (it boosts only under sustained load), then interleaved rounds (rotating "
+	                     "warmup_seconds (it boosts only under sustained load), then interleaved rounds (shuffled "
 	                     "order); "
 	                     "time = median over rounds; speedup = median over rounds of unfused/fused in the same round; "
 	                     "bandwidth = bytes each kernel reads and writes / median time");
@@ -420,7 +441,7 @@ SampledError run_and_check(const MatmulVariant& v, cudaStream_t stream, const st
 // between the events leaves out the host-side cost of launching, which
 // differs between cuBLAS and these kernels. 3 warmup replays per variant and
 // warm-up rounds until the GPU has been busy for `warmup_seconds`, then
-// interleaved rounds (rotating order), with the SM clock sampled after each.
+// interleaved rounds (shuffled order), with the SM clock sampled after each.
 void time_graphs(std::vector<MatmulVariant>& variants, cudaStream_t stream, double warmup_seconds, double seconds,
                  std::vector<double>& clocks) {
 	struct Replay {
@@ -459,11 +480,9 @@ void time_graphs(std::vector<MatmulVariant>& variants, cudaStream_t stream, doub
 	double round_ms = 0;
 	for (std::size_t j=0; j<variants.size(); ++j) round_ms += once(j);
 	const int rounds = std::clamp(static_cast<int>(seconds * 1000.0 / std::max(round_ms, 1e-3)), 10, 2000);
+	RoundOrder order(variants.size());
 	for (int r=0; r<rounds; ++r) {
-		for (std::size_t j=0; j<variants.size(); ++j) {
-			const std::size_t v = (j + static_cast<std::size_t>(r)) % variants.size();
-			variants[v].samples_ms.push_back(once(v));
-		}
+		for (std::size_t v : order.next()) variants[v].samples_ms.push_back(once(v));
 		clocks.push_back(cuda::current_sm_clock_mhz(0));  // sampled under load
 	}
 	for (Replay& r : replays) {
@@ -556,7 +575,7 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 	                     "CUDA graph and replayed on one stream, so host-side launch overhead (which differs between "
 	                     "cuBLAS and these kernels) is left out for all; 3 warmup "
 	                     "runs per variant and warm-up rounds until the GPU has been busy for warmup_seconds, then "
-	                     "interleaved rounds (rotating order); time = median over rounds; GFLOP/s = 2mnk / time; "
+	                     "interleaved rounds (shuffled order); time = median over rounds; GFLOP/s = 2mnk / time; "
 	                     "ratios are medians over rounds of per-round ratios. Each kernel's result is checked on 1000 "
 	                     "sampled elements against a float64 dot product within the FP32 error bound. cuBLAS runs in "
 	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores). auto_picks is the "
@@ -709,7 +728,7 @@ int run_tensor_core(const std::string& out_path, double warmup_seconds, double s
 	json.field("method", "GPU time of each variant's launches, from event-record nodes captured with them into a "
 	                     "CUDA graph and replayed on one stream, as in matmul.json; 3 warmup runs per variant and "
 	                     "warm-up rounds until the GPU has been busy for warmup_seconds, then interleaved rounds "
-	                     "(rotating order); time = median over rounds; TFLOP/s = 2mnk / time; ratios are medians over "
+	                     "(shuffled order); time = median over rounds; TFLOP/s = 2mnk / time; ratios are medians over "
 	                     "rounds of per-round ratios. Each result is checked on 1000 sampled elements against a "
 	                     "float64 dot product: FP32 variants within gamma_k sum|ab| + u|exact|, the others within "
 	                     "(2u' + u'^2 + 2 gamma_k) sum|ab| + 2 u32 |exact| (+ 2k 2^-24 for FP16), u' = 2u allowing "

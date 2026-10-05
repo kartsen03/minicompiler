@@ -27,8 +27,8 @@ The host's launch overhead therefore counts whenever the GPU has to wait for
 it, as it would for a real caller. Matmuls run in full FP32 everywhere (TF32 is
 disabled in PyTorch and by NVIDIA_TF32_OVERRIDE=0).
 
-Timing is interleaved: after warmup, each round runs every variant once in
-rotating order. On a laptop a core's speed drifts (the same workload ran at
+Timing is interleaved: after warmup, each round runs every variant once in a
+shuffled order. On a laptop a core's speed drifts (the same workload ran at
 ~1.1 ms, then 2-3 ms, then ~1.5 ms within one minute here), and a GPU's clock
 moves with power and heat, so runs taken at different times cannot be
 compared. Within a round all variants see the same conditions, so each round
@@ -50,6 +50,7 @@ import ctypes
 import json
 import os
 import platform
+import random
 import statistics
 import sys
 import time
@@ -276,8 +277,10 @@ def time_interleaved(fns: dict, warmup: int, warmup_seconds: float, seconds: flo
     """Warms every function up (`warmup` calls each, then rounds of all of them
     until `warmup_seconds` have passed: a laptop GPU idles at a few hundred MHz
     and boosts only under sustained load), then runs rounds of one call each,
-    rotating the order every round. Returns the per-round times in ms for each
-    function."""
+    in a fresh shuffled order every round (seeded, so runs repeat). Rotating
+    the order instead would have every function run right after the same
+    one, and a GPU at its power limit starts each call with the headroom its
+    predecessor left. Returns the per-round times in ms for each function."""
     names = list(fns)
     for fn in fns.values():
         for _ in range(warmup):
@@ -289,9 +292,11 @@ def time_interleaved(fns: dict, warmup: int, warmup_seconds: float, seconds: flo
     probe = sum(statistics.median(timed(fns[n]) for _ in range(3)) for n in names)
     rounds = max(20, min(2000, int(seconds * 1000.0 / max(probe, 1e-3))))
     samples = {n: [] for n in names}
-    for r in range(rounds):
-        for i in range(len(names)):
-            n = names[(i + r) % len(names)]
+    rng = random.Random(20261005)
+    order = list(names)
+    for _ in range(rounds):
+        rng.shuffle(order)
+        for n in order:
             samples[n].append(timed(fns[n]))
         if after_round:
             after_round()
@@ -460,7 +465,7 @@ def main() -> int:
     if gpu:
         method = (f"all variants in one process on one CUDA stream; {args.warmup} warmup runs each and "
                   f"{args.warmup_seconds} s of warm-up rounds (the GPU boosts only under sustained load), then "
-                  "interleaved rounds (one run of each variant per round, rotating order, each followed by a "
+                  "interleaved rounds (one run of each variant per round, shuffled order, each followed by a "
                   f"synchronize) for about {args.seconds} s per config; each run timed with CUDA events recorded "
                   "on the stream before and after the call, so "
                   "launch overhead counts when the GPU waits for the host; timing = median over rounds; "
@@ -471,7 +476,7 @@ def main() -> int:
                   "launches nothing, interleaved in the same rounds: the overhead included in every time.")
     else:
         method = (f"all variants in one process; {args.warmup} warmup runs each, then interleaved rounds (one run "
-                  f"of each variant per round, rotating order) for about {args.seconds} s per config; "
+                  f"of each variant per round, shuffled order) for about {args.seconds} s per config; "
                   "time.perf_counter_ns per run; timing = median over rounds; ratio_to_minicompiler = median over "
                   "rounds of (variant time / minicompiler time) in the same round. minicompiler is called through "
                   "ctypes on the NumPy buffers (no copies); PyTorch runs under torch.inference_mode().")
