@@ -6,6 +6,10 @@
 
 #include <Eigen/Core>
 
+#ifdef MINICOMPILER_HAVE_CUDA
+#include "minicompiler/cuda/cuda_backend.hpp"
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -253,5 +257,26 @@ inline void write_environment(JsonWriter& json) {
 	json.field("host_power_plan", env_or("MINICOMPILER_HOST_POWER_PLAN", "unknown"));
 	json.end_object();
 }
+
+#ifdef MINICOMPILER_HAVE_CUDA
+// The GPU as queried at runtime, plus the range of SM clocks sampled while
+// the benchmark ran (laptop GPUs boost and throttle with power and heat).
+inline void write_device(JsonWriter& json, const cuda::DeviceInfo& d, std::vector<double> clocks) {
+	json.key("device").begin_object();
+	json.field("name", d.name).field("compute_capability", std::to_string(d.cc_major) + "." + std::to_string(d.cc_minor));
+	json.field("sm_count", d.sm_count).field("fp32_lanes_per_sm", d.fp32_lanes_per_sm);
+	json.field("sm_clock_mhz_cuda_attribute", d.sm_clock_mhz).field("max_sm_clock_mhz_nvml", d.max_sm_clock_mhz);
+	json.field("mem_clock_mhz", d.mem_clock_mhz).field("bus_width_bits", d.bus_width_bits);
+	json.field("peak_bandwidth_gbs", d.peak_bandwidth_gbs());
+	json.field("cuda_runtime", d.runtime_version).field("cuda_driver", d.driver_version);
+	if (!clocks.empty()) {
+		std::sort(clocks.begin(), clocks.end());
+		json.key("sm_clock_mhz_during_run").begin_object();
+		json.field("min", clocks.front()).field("median", clocks[clocks.size() / 2]).field("max", clocks.back());
+		json.end_object();
+	}
+	json.end_object();
+}
+#endif
 
 }

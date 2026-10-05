@@ -133,23 +133,6 @@ double max_normwise_diff(const std::vector<std::vector<float>>& a, const std::ve
 	return worst;
 }
 
-void write_device(bench::JsonWriter& json, const cuda::DeviceInfo& d, const std::vector<double>& clocks) {
-	json.key("device").begin_object();
-	json.field("name", d.name).field("compute_capability", std::to_string(d.cc_major) + "." + std::to_string(d.cc_minor));
-	json.field("sm_count", d.sm_count).field("fp32_lanes_per_sm", d.fp32_lanes_per_sm);
-	json.field("sm_clock_mhz_cuda_attribute", d.sm_clock_mhz).field("max_sm_clock_mhz_nvml", d.max_sm_clock_mhz);
-	json.field("mem_clock_mhz", d.mem_clock_mhz).field("bus_width_bits", d.bus_width_bits);
-	json.field("peak_bandwidth_gbs", d.peak_bandwidth_gbs());
-	json.field("cuda_runtime", d.runtime_version).field("cuda_driver", d.driver_version);
-	if (!clocks.empty()) {
-		std::vector<double> c = clocks;
-		std::sort(c.begin(), c.end());
-		json.key("sm_clock_mhz_during_run").begin_object();
-		json.field("min", c.front()).field("median", c[c.size() / 2]).field("max", c.back()).end_object();
-	}
-	json.end_object();
-}
-
 int run_elementwise(const std::string& graph_dir, const std::string& out_path, double seconds) {
 	const cuda::DeviceInfo device = must(cuda::query_device(0), "query_device");
 	CHECK_CUDA(cudaSetDevice(0));
@@ -243,7 +226,7 @@ int run_elementwise(const std::string& graph_dir, const std::string& out_path, d
 		}
 	}
 	json.end_array();
-	write_device(json, device, clocks);
+	bench::write_device(json, device, clocks);
 	json.end_object();
 	CHECK_CUDA(cudaStreamDestroy(stream));
 
@@ -461,7 +444,7 @@ int run_matmul(const std::string& out_path, double seconds) {
 		CHECK_CUDA(cudaFree(dc));
 	}
 	json.end_array();
-	write_device(json, device, clocks);
+	bench::write_device(json, device, clocks);
 	json.end_object();
 	CHECK_CUBLAS(cublasDestroy(handle));
 	CHECK_CUDA(cudaStreamDestroy(stream));
