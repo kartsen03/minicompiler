@@ -5,9 +5,12 @@
 #include "minicompiler/graph_builder.hpp"
 #include "minicompiler/parser.hpp"
 #include "minicompiler/passes/pipeline.hpp"
+#include "minicompiler/random.hpp"
 
+#include "cuda/matmul_kernels.hpp"
 #include "test_util.hpp"
 
+#include <cuda_runtime.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -128,7 +131,7 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 	for (const cuda::MatmulKernel kernel :
 	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
 	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized,
-	      cuda::MatmulKernel::DoubleBuffered}) {
+	      cuda::MatmulKernel::DoubleBuffered, cuda::MatmulKernel::SplitK}) {
 		cuda::CudaOptions options;
 		options.matmul = kernel;
 		for (const auto& [m, k, n] : shapes) {
@@ -158,11 +161,82 @@ TEST(CudaBackend, EveryMatmulKernelIsWithinTheDotProductErrorBound) {
 	}
 }
 
+TEST(CudaBackend, SplitKIsWithinTheDotProductErrorBoundForAnySplitCount) {
+	REQUIRE_GPU();
+	// Forced split counts, where the rule would pick one per shape: more splits
+	// than K has tiles, a last split shorter than the others, K below one tile,
+	// and shapes that take the element-by-element path (K or N not a multiple
+	// of 4). Splitting K only reorders the sum, so the usual bound holds.
+	const std::vector<std::array<int, 3>> shapes = {
+		{33, 1000, 65}, {128, 2048, 512}, {16, 4099, 16}, {2, 12, 4}, {129, 260, 132}, {64, 5, 8}};
+	const double u = std::ldexp(1.0, -24);
+	for (const auto& [m, k, n] : shapes) {
+		const std::size_t a_n = static_cast<std::size_t>(m) * k, b_n = static_cast<std::size_t>(k) * n;
+		const std::size_t c_n = static_cast<std::size_t>(m) * n;
+		const std::vector<float> a = uniform_values(a_n, 7, -1.0f, 1.0f);
+		const std::vector<float> b = uniform_values(b_n, 8, -1.0f, 1.0f);
+		std::vector<double> exact(c_n, 0.0), abs_dot(c_n, 0.0);
+		for (int r=0; r<m; ++r) {
+			for (int t=0; t<k; ++t) {
+				const double av = a[static_cast<std::size_t>(r) * k + t];
+				for (int col=0; col<n; ++col) {
+					const double p = av * b[static_cast<std::size_t>(t) * n + col];
+					exact[static_cast<std::size_t>(r) * n + col] += p;
+					abs_dot[static_cast<std::size_t>(r) * n + col] += std::fabs(p);
+				}
+			}
+		}
+		float *da, *db, *dc;
+		ASSERT_EQ(cudaMalloc(&da, a_n * sizeof(float)), cudaSuccess);
+		ASSERT_EQ(cudaMalloc(&db, b_n * sizeof(float)), cudaSuccess);
+		ASSERT_EQ(cudaMalloc(&dc, c_n * sizeof(float)), cudaSuccess);
+		ASSERT_EQ(cudaMemcpy(da, a.data(), a_n * sizeof(float), cudaMemcpyHostToDevice), cudaSuccess);
+		ASSERT_EQ(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice), cudaSuccess);
+		const double gamma = k * u / (1.0 - k * u);
+		for (int splits : {1, 2, 3, 7, 16, 64}) {
+			float* workspace = nullptr;
+			const std::size_t bytes = cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, m, n, splits);
+			if (bytes > 0) {
+				ASSERT_EQ(cudaMalloc(&workspace, bytes), cudaSuccess);
+			}
+			ASSERT_EQ(cudaMemset(dc, 0xff, c_n * sizeof(float)), cudaSuccess);  // NaN, so unwritten outputs fail
+			ASSERT_EQ(cuda::launch_matmul(cuda::MatmulKernel::SplitK, da, db, dc, m, n, k, nullptr, splits, workspace),
+			          cudaSuccess);
+			std::vector<float> c(c_n);
+			ASSERT_EQ(cudaMemcpy(c.data(), dc, c_n * sizeof(float), cudaMemcpyDeviceToHost), cudaSuccess);
+			for (std::size_t i=0; i<c_n; ++i) {
+				ASSERT_LE(std::fabs(c[i] - exact[i]), gamma * abs_dot[i] + u * std::fabs(exact[i]))
+				    << m << "x" << k << "x" << n << " with " << splits << " splits, element " << i;
+			}
+			if (workspace) cudaFree(workspace);
+		}
+		cudaFree(da);
+		cudaFree(db);
+		cudaFree(dc);
+	}
+}
+
+TEST(CudaBackend, SplitKSplitsSmallOutputsAcrossTheSms) {
+	// On 30 SMs (arguments are m, n, k):
+	EXPECT_EQ(cuda::split_k_splits(128, 512, 2048, 30), 7);    // 4 tiles: one block per SM, 28 blocks
+	EXPECT_EQ(cuda::split_k_splits(128, 1920, 2048, 30), 2);   // 15 tiles, the last count with one per SM
+	EXPECT_EQ(cuda::split_k_splits(128, 2048, 2048, 30), 3);   // 16 tiles: up to two per SM, 48 blocks
+	EXPECT_EQ(cuda::split_k_splits(128, 2944, 2048, 30), 2);   // 23 tiles, just below 80% of the SMs
+	EXPECT_EQ(cuda::split_k_splits(128, 3072, 2048, 30), 1);   // 24 tiles: no split
+	EXPECT_EQ(cuda::split_k_splits(640, 640, 640, 30), 1);     // 25 tiles
+	EXPECT_EQ(cuda::split_k_splits(1024, 1024, 1024, 30), 1);  // 64 tiles fill the GPU
+	EXPECT_EQ(cuda::split_k_splits(128, 128, 200, 30), 3);     // 1 tile, but at least 64 of K per split
+	EXPECT_EQ(cuda::split_k_splits(128, 128, 100, 30), 1);     // K too short to split
+	EXPECT_EQ(cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, 128, 512, 15), 15u * 128 * 512 * 4);
+	EXPECT_EQ(cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, 128, 512, 1), 0u);
+	EXPECT_EQ(cuda::matmul_workspace_bytes(cuda::MatmulKernel::DoubleBuffered, 128, 512, 15), 0u);
+}
+
 TEST(CudaBackend, MatmulKernelNamesRoundTrip) {
 	for (const cuda::MatmulKernel kernel :
 	     {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled, cuda::MatmulKernel::RegisterTiled,
 	      cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64, cuda::MatmulKernel::Vectorized,
-	      cuda::MatmulKernel::DoubleBuffered}) {
+	      cuda::MatmulKernel::DoubleBuffered, cuda::MatmulKernel::SplitK}) {
 		Result<cuda::MatmulKernel> parsed = cuda::matmul_kernel_from_name(cuda::matmul_kernel_name(kernel));
 		ASSERT_TRUE(parsed.ok());
 		EXPECT_EQ(parsed.value(), kernel);

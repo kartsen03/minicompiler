@@ -372,12 +372,19 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 		CHECK_CUDA(cudaMemcpy(da, a.data(), a_n * sizeof(float), cudaMemcpyHostToDevice));
 		CHECK_CUDA(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice));
 
+		// Split-K's splits for this shape and the workspace for its partial products.
+		const int splits = cuda::split_k_splits(s.m, s.n, s.k, device.sm_count);
+		const std::size_t workspace_bytes = cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, s.m, s.n, splits);
+		float* workspace = nullptr;
+		if (workspace_bytes > 0) CHECK_CUDA(cudaMalloc(&workspace, workspace_bytes));
 		std::vector<MatmulVariant> variants;
 		for (cuda::MatmulKernel kernel : {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
 		                                  cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64,
-		                                  cuda::MatmulKernel::Vectorized, cuda::MatmulKernel::DoubleBuffered}) {
+		                                  cuda::MatmulKernel::Vectorized, cuda::MatmulKernel::DoubleBuffered,
+		                                  cuda::MatmulKernel::SplitK}) {
 			variants.push_back({cuda::matmul_kernel_name(kernel), [=](cudaStream_t st) {
-				                    CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, st));
+				                    CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, st, splits,
+				                                                   workspace));
 			                    }, {}});
 		}
 		variants.push_back({"cublas", [=](cudaStream_t) {
@@ -451,6 +458,7 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 		json.field("shape", s.label).field("m", s.m).field("k", s.k).field("n", s.n);
 		json.field("tiles_128x128", ((s.m + 127) / 128) * ((s.n + 127) / 128));
 		json.field("register_tiled_picks", picks);
+		json.field("split_k_splits", splits);
 		json.field("sm_clock_mhz_median", clock_now);
 		json.key("kernels").begin_array();
 		for (const MatmulVariant& v : variants) {
@@ -472,6 +480,7 @@ int run_matmul(const std::string& out_path, double warmup_seconds, double second
 		CHECK_CUDA(cudaFree(da));
 		CHECK_CUDA(cudaFree(db));
 		CHECK_CUDA(cudaFree(dc));
+		if (workspace) CHECK_CUDA(cudaFree(workspace));
 	}
 	json.end_array();
 	bench::write_device(json, device, clocks);
@@ -548,17 +557,24 @@ int run_profile(const std::string& graph_dir, const std::string& only, bool list
 		CHECK_CUDA(cudaMalloc(&dc, static_cast<std::size_t>(s.m) * s.n * sizeof(float)));
 		CHECK_CUDA(cudaMemcpy(da, a.data(), a_n * sizeof(float), cudaMemcpyHostToDevice));
 		CHECK_CUDA(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice));
+		const int splits = cuda::split_k_splits(s.m, s.n, s.k, device.sm_count);
+		const std::size_t workspace_bytes = cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, s.m, s.n, splits);
+		float* workspace = nullptr;
+		if (workspace_bytes > 0) CHECK_CUDA(cudaMalloc(&workspace, workspace_bytes));
 		for (cuda::MatmulKernel kernel : {cuda::MatmulKernel::Naive, cuda::MatmulKernel::Tiled,
 		                                  cuda::MatmulKernel::RegisterTiled128, cuda::MatmulKernel::RegisterTiled64,
-		                                  cuda::MatmulKernel::Vectorized, cuda::MatmulKernel::DoubleBuffered}) {
-			profiled(label + "." + cuda::matmul_kernel_name(kernel),
-			         [&] { CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, stream)); });
+		                                  cuda::MatmulKernel::Vectorized, cuda::MatmulKernel::DoubleBuffered,
+		                                  cuda::MatmulKernel::SplitK}) {
+			profiled(label + "." + cuda::matmul_kernel_name(kernel), [&] {
+				CHECK_CUDA(cuda::launch_matmul(kernel, da, db, dc, s.m, s.n, s.k, stream, splits, workspace));
+			});
 		}
 		profiled(label + ".cublas", [&] {
 			const float alpha = 1.0f, beta = 0.0f;
 			CHECK_CUBLAS(cublasSgemm(handle, CUBLAS_OP_N, CUBLAS_OP_N, s.n, s.m, s.k, &alpha, db, s.n, da, s.k, &beta,
 			                         dc, s.n));
 		});
+		if (workspace) CHECK_CUDA(cudaFree(workspace));
 		CHECK_CUDA(cudaFree(da));
 		CHECK_CUDA(cudaFree(db));
 		CHECK_CUDA(cudaFree(dc));

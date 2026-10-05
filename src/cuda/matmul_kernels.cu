@@ -1,7 +1,9 @@
 #include "cuda/matmul_kernels.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 namespace minicompiler::cuda {
 namespace {
@@ -152,35 +154,40 @@ constexpr int kVecBN = 128;
 constexpr int kVecThreads = 256;
 constexpr int kAPad = 4;
 
+// Four consecutive elements of a row-major matrix with row stride `stride`,
+// from (row, col); zero for rows at or past row_end and columns at or past
+// col_end.
 template <bool kVec>
-__device__ __forceinline__ float4 load4(const float* __restrict__ p, int row, int col, int rows, int cols) {
+__device__ __forceinline__ float4 load4(const float* __restrict__ p, int row, int col, int row_end, int col_end,
+                                        int stride) {
 	float4 v = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-	if (row >= rows) return v;
-	const float* src = p + static_cast<std::ptrdiff_t>(row) * cols + col;
+	if (row >= row_end) return v;
+	const float* src = p + static_cast<std::ptrdiff_t>(row) * stride + col;
 	if constexpr (kVec) {
-		// cols is a multiple of 4, so the 4 elements are all in range or all out.
-		if (col < cols) v = *reinterpret_cast<const float4*>(src);
+		// col and col_end are multiples of 4: the 4 elements are all in range or all out.
+		if (col < col_end) v = *reinterpret_cast<const float4*>(src);
 	} else {
-		if (col + 0 < cols) v.x = src[0];
-		if (col + 1 < cols) v.y = src[1];
-		if (col + 2 < cols) v.z = src[2];
-		if (col + 3 < cols) v.w = src[3];
+		if (col + 0 < col_end) v.x = src[0];
+		if (col + 1 < col_end) v.y = src[1];
+		if (col + 2 < col_end) v.z = src[2];
+		if (col + 3 < col_end) v.w = src[3];
 	}
 	return v;
 }
 
 // This thread's share of the A tile (BK/8 float4 of 4 consecutive k) and of
-// the B tile (BK/8 float4 of 4 consecutive columns) starting at k0.
+// the B tile (BK/8 float4 of 4 consecutive columns) starting at k0, with K
+// ending at k_end (a split's end, or k).
 template <int BK, bool kVec>
 __device__ __forceinline__ void load_tiles(const float* __restrict__ a, const float* __restrict__ b, int m, int n,
-                                           int k, int block_row, int block_col, int k0, float4 (&ra)[BK / 8],
-                                           float4 (&rb)[BK / 8]) {
+                                           int k, int k_end, int block_row, int block_col, int k0,
+                                           float4 (&ra)[BK / 8], float4 (&rb)[BK / 8]) {
 	const int warp = threadIdx.x / 32, lane = threadIdx.x % 32;
 #pragma unroll
 	for (int l=0; l<BK / 8; ++l) {
 		const int g = warp + 8 * l;  // which 16 rows (g % 8) and which 8 k (g / 8)
-		ra[l] = load4<kVec>(a, block_row + (g % 8) * 16 + lane / 2, k0 + (g / 8) * 8 + (lane % 2) * 4, m, k);
-		rb[l] = load4<kVec>(b, k0 + g, block_col + lane * 4, k, n);
+		ra[l] = load4<kVec>(a, block_row + (g % 8) * 16 + lane / 2, k0 + (g / 8) * 8 + (lane % 2) * 4, m, k_end, k);
+		rb[l] = load4<kVec>(b, k0 + g, block_col + lane * 4, k_end, n, n);
 	}
 }
 
@@ -249,10 +256,14 @@ __device__ __forceinline__ void store_c(float* __restrict__ c, const float (&acc
 // tile's math and written to a second shared-memory buffer after it, so their
 // latency hides behind the FMAs instead of stalling every tile, and one barrier
 // per tile is enough instead of two.
+//
+// Split-K: block z of the grid's depth covers K from z * k_split to
+// (z + 1) * k_split. With a depth of 1 it writes C; deeper, it writes its
+// partial product to slice z of `partial`, and sum_splits adds the slices.
 template <int BK, bool kVec, bool kDoubleBuffer>
 __global__ void __launch_bounds__(kVecThreads, 2)
 matmul_vectorized(const float* __restrict__ a, const float* __restrict__ b, float* __restrict__ c, int m, int n,
-                  int k) {
+                  int k, int k_split, float* __restrict__ partial) {
 	constexpr int kStages = kDoubleBuffer ? 2 : 1;
 	__shared__ __align__(16) float as[kStages][BK][kVecBM + kAPad];
 	__shared__ __align__(16) float bs[kStages][BK][kVecBN];
@@ -261,18 +272,20 @@ matmul_vectorized(const float* __restrict__ a, const float* __restrict__ b, floa
 	const int ty = lane / 4, tx = lane % 4;
 	const int block_row = blockIdx.y * kVecBM, block_col = blockIdx.x * kVecBN;
 	const int a_col = warp_row + ty * 4, b_col = warp_col + tx * 4;
+	const int k_begin = blockIdx.z * k_split;
+	const int k_end = min(k, k_begin + k_split);
 
 	float acc[8][8] = {};
 	float4 ra[BK / 8], rb[BK / 8];
 	if constexpr (kDoubleBuffer) {
-		const int tiles = (k + BK - 1) / BK;
-		load_tiles<BK, kVec>(a, b, m, n, k, block_row, block_col, 0, ra, rb);
+		const int tiles = (k_end - k_begin + BK - 1) / BK;
+		load_tiles<BK, kVec>(a, b, m, n, k, k_end, block_row, block_col, k_begin, ra, rb);
 		store_tiles<BK>(as[0], bs[0], ra, rb);
 		__syncthreads();
 		for (int t=0; t<tiles; ++t) {
 			const int cur = t & 1;
 			const bool more = t + 1 < tiles;
-			if (more) load_tiles<BK, kVec>(a, b, m, n, k, block_row, block_col, (t + 1) * BK, ra, rb);
+			if (more) load_tiles<BK, kVec>(a, b, m, n, k, k_end, block_row, block_col, k_begin + (t + 1) * BK, ra, rb);
 			compute_tile<BK>(as[cur], bs[cur], acc, a_col, b_col);
 			// The other buffer was last read in the previous iteration, before its
 			// closing barrier, so it is free to overwrite.
@@ -280,38 +293,113 @@ matmul_vectorized(const float* __restrict__ a, const float* __restrict__ b, floa
 			__syncthreads();
 		}
 	} else {
-		for (int k0=0; k0<k; k0+=BK) {
-			load_tiles<BK, kVec>(a, b, m, n, k, block_row, block_col, k0, ra, rb);
+		for (int k0=k_begin; k0<k_end; k0+=BK) {
+			load_tiles<BK, kVec>(a, b, m, n, k, k_end, block_row, block_col, k0, ra, rb);
 			store_tiles<BK>(as[0], bs[0], ra, rb);
 			__syncthreads();
 			compute_tile<BK>(as[0], bs[0], acc, a_col, b_col);
 			__syncthreads();
 		}
 	}
-	store_c<kVec>(c, acc, m, n, block_row + a_col, block_col + b_col);
+	// Chosen after the loop, so the pointer does not hold registers during it.
+	float* __restrict__ out = gridDim.z == 1 ? c : partial + static_cast<std::ptrdiff_t>(blockIdx.z) * m * n;
+	store_c<kVec>(out, acc, m, n, block_row + a_col, block_col + b_col);
+}
+
+// C = the split-K partial products added slice by slice, always in the same
+// order, so the result does not depend on how the blocks were scheduled.
+template <bool kVec>
+__global__ void __launch_bounds__(256)
+sum_splits(const float* __restrict__ partial, float* __restrict__ c, std::size_t count, int splits) {
+	using T = std::conditional_t<kVec, float4, float>;
+	const T* in = reinterpret_cast<const T*>(partial);
+	T* out = reinterpret_cast<T*>(c);
+	const std::size_t n = kVec ? count / 4 : count;
+	for (std::size_t i = blockIdx.x * static_cast<std::size_t>(blockDim.x) + threadIdx.x; i < n;
+	     i += static_cast<std::size_t>(gridDim.x) * blockDim.x) {
+		T s = in[i];
+		for (int z=1; z<splits; ++z) {
+			const T v = in[z * n + i];
+			if constexpr (kVec) {
+				s.x += v.x;
+				s.y += v.y;
+				s.z += v.z;
+				s.w += v.w;
+			} else {
+				s += v;
+			}
+		}
+		out[i] = s;
+	}
+}
+
+bool aligned16(const void* p) {
+	return reinterpret_cast<std::uintptr_t>(p) % 16 == 0;
 }
 
 // float4 access needs every row of A, B and C to start 16-byte aligned.
 bool rows_aligned(const float* a, const float* b, const float* c, int n, int k) {
-	const auto aligned = [](const void* p) { return reinterpret_cast<std::uintptr_t>(p) % 16 == 0; };
-	return n % 4 == 0 && k % 4 == 0 && aligned(a) && aligned(b) && aligned(c);
+	return n % 4 == 0 && k % 4 == 0 && aligned16(a) && aligned16(b) && aligned16(c);
+}
+
+// K per split: whole tiles, so every split but the last covers the same K.
+int split_size(int k, int splits, int bk) {
+	return splits > 1 ? ((k + splits - 1) / splits + bk - 1) / bk * bk : std::max(k, 1);
 }
 
 template <int BK, bool kDoubleBuffer>
-cudaError_t launch_vectorized(const float* a, const float* b, float* c, int m, int n, int k, cudaStream_t stream) {
-	const dim3 grid((n + kVecBN - 1) / kVecBN, (m + kVecBM - 1) / kVecBM);
-	if (rows_aligned(a, b, c, n, k)) {
-		matmul_vectorized<BK, true, kDoubleBuffer><<<grid, kVecThreads, 0, stream>>>(a, b, c, m, n, k);
+cudaError_t launch_vectorized(const float* a, const float* b, float* c, int m, int n, int k, cudaStream_t stream,
+                              int splits = 1, float* workspace = nullptr) {
+	const int k_split = split_size(k, splits, BK);
+	const int depth = std::max(1, (k + k_split - 1) / k_split);  // at most `splits`
+	if (depth > 1 && !workspace) return cudaErrorInvalidValue;
+	const dim3 grid((n + kVecBN - 1) / kVecBN, (m + kVecBM - 1) / kVecBM, depth);
+	const bool vec = rows_aligned(a, b, c, n, k) && (depth == 1 || aligned16(workspace));
+	if (vec) {
+		matmul_vectorized<BK, true, kDoubleBuffer><<<grid, kVecThreads, 0, stream>>>(a, b, c, m, n, k, k_split,
+		                                                                              workspace);
 	} else {
-		matmul_vectorized<BK, false, kDoubleBuffer><<<grid, kVecThreads, 0, stream>>>(a, b, c, m, n, k);
+		matmul_vectorized<BK, false, kDoubleBuffer><<<grid, kVecThreads, 0, stream>>>(a, b, c, m, n, k, k_split,
+		                                                                               workspace);
+	}
+	if (depth == 1) return cudaGetLastError();
+	const cudaError_t err = cudaGetLastError();
+	if (err != cudaSuccess) return err;
+	const std::size_t count = static_cast<std::size_t>(m) * n;
+	const std::size_t items = vec ? count / 4 : count;
+	const unsigned blocks = static_cast<unsigned>(std::min<std::size_t>((items + 255) / 256, 4096));
+	if (vec) {
+		sum_splits<true><<<blocks, 256, 0, stream>>>(workspace, c, count, depth);
+	} else {
+		sum_splits<false><<<blocks, 256, 0, stream>>>(workspace, c, count, depth);
 	}
 	return cudaGetLastError();
 }
 
 }
 
+int split_k_splits(int m, int n, int k, int sm_count) {
+	const std::int64_t tiles = ((static_cast<std::int64_t>(m) + kVecBM - 1) / kVecBM) *
+	                           ((static_cast<std::int64_t>(n) + kVecBN - 1) / kVecBN);
+	const std::int64_t sms = sm_count;
+	// An output that nearly fills the GPU gains less from more blocks than the
+	// partial products cost to write and add.
+	if (5 * tiles >= 4 * sms) return 1;
+	// Up to half the SMs' worth of tiles: one block per SM, since a second block
+	// on only some SMs makes a tail that the rest wait for. Beyond that, two
+	// splits would already overflow one block per SM, so split for up to two.
+	std::int64_t splits = 2 * tiles <= sms ? sms / tiles : 2 * sms / tiles;
+	splits = std::min(splits, static_cast<std::int64_t>(k / 64));  // at least 64 of K per split
+	return static_cast<int>(std::max<std::int64_t>(splits, 1));
+}
+
+std::size_t matmul_workspace_bytes(MatmulKernel kernel, int m, int n, int splits) {
+	if (kernel != MatmulKernel::SplitK || splits <= 1) return 0;
+	return static_cast<std::size_t>(splits) * m * n * sizeof(float);
+}
+
 cudaError_t launch_matmul(MatmulKernel kernel, const float* a, const float* b, float* c, int m, int n, int k,
-                          cudaStream_t stream) {
+                          cudaStream_t stream, int splits, float* workspace) {
 	switch (kernel) {
 		case MatmulKernel::Naive: {
 			const dim3 block(16, 16);
@@ -334,6 +422,7 @@ cudaError_t launch_matmul(MatmulKernel kernel, const float* a, const float* b, f
 		case MatmulKernel::RegisterTiled64: return launch_register_tiled<64, 64, 8, 4, 4>(a, b, c, m, n, k, stream);
 		case MatmulKernel::Vectorized: return launch_vectorized<8, false>(a, b, c, m, n, k, stream);
 		case MatmulKernel::DoubleBuffered: return launch_vectorized<8, true>(a, b, c, m, n, k, stream);
+		case MatmulKernel::SplitK: return launch_vectorized<8, true>(a, b, c, m, n, k, stream, splits, workspace);
 		case MatmulKernel::RegisterTiled: break;  // must be resolved to a tile size first
 	}
 	return cudaErrorInvalidValue;

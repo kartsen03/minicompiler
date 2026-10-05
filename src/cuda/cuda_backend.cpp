@@ -21,6 +21,7 @@ const char* matmul_kernel_name(MatmulKernel kernel) {
 		case MatmulKernel::RegisterTiled64: return "register_tiled_64";
 		case MatmulKernel::Vectorized: return "vectorized";
 		case MatmulKernel::DoubleBuffered: return "double_buffered";
+		case MatmulKernel::SplitK: return "split_k";
 	}
 	return "?";
 }
@@ -28,12 +29,12 @@ const char* matmul_kernel_name(MatmulKernel kernel) {
 Result<MatmulKernel> matmul_kernel_from_name(const std::string& name) {
 	for (MatmulKernel k : {MatmulKernel::Naive, MatmulKernel::Tiled, MatmulKernel::RegisterTiled,
 	                       MatmulKernel::RegisterTiled128, MatmulKernel::RegisterTiled64, MatmulKernel::Vectorized,
-	                       MatmulKernel::DoubleBuffered}) {
+	                       MatmulKernel::DoubleBuffered, MatmulKernel::SplitK}) {
 		if (name == matmul_kernel_name(k)) return k;
 	}
 	return Error{"unknown matmul kernel '" + name +
 	             "' (naive, tiled, register_tiled, register_tiled_128, register_tiled_64, vectorized, "
-	             "double_buffered)"};
+	             "double_buffered, split_k)"};
 }
 
 MatmulKernel resolve_matmul_kernel(MatmulKernel kernel, int m, int n, int sm_count) {
@@ -85,8 +86,11 @@ struct Launch {
 	unsigned count = 0;                 // elements, or groups of 4 when vectorized
 	std::vector<CUdeviceptr> pointers;  // out first, then the inputs
 	std::vector<void*> params;          // addresses of the kernel arguments, for cuLaunchKernel
-	// MatMul: C[m,n] = A[m,k] B[k,n], with the kernel chosen for this shape.
+	// MatMul: C[m,n] = A[m,k] B[k,n], with the kernel chosen for this shape,
+	// and for SplitK the number of splits and their workspace.
 	MatmulKernel matmul = MatmulKernel::RegisterTiled128;
+	int splits = 1;
+	float* workspace = nullptr;
 	const float* a = nullptr;
 	const float* b = nullptr;
 	float* c = nullptr;
@@ -162,7 +166,7 @@ public:
 		for (Launch& launch : launches_) {
 			if (launch.is_matmul) {
 				MC_CUDA_RETURN(launch_matmul(launch.matmul, launch.a, launch.b, launch.c, launch.m, launch.n, launch.k,
-				                             s));
+				                             s, launch.splits, launch.workspace));
 			} else {
 				MC_CU_RETURN(cuLaunchKernel(launch.function, launch.grid, 1, 1, kBlockSize, 1, 1, 0, s,
 				                            launch.params.data(), nullptr));
@@ -262,6 +266,17 @@ private:
 			launch.k = static_cast<int>(a[1]);
 			launch.n = static_cast<int>(node.type.shape[1]);
 			launch.matmul = resolve_matmul_kernel(options_.matmul, launch.m, launch.n, device_.sm_count);
+			if (launch.matmul == MatmulKernel::SplitK) {
+				launch.splits = split_k_splits(launch.m, launch.n, launch.k, device_.sm_count);
+				const std::size_t bytes = matmul_workspace_bytes(launch.matmul, launch.m, launch.n, launch.splits);
+				if (bytes > 0) {
+					DeviceBuffer workspace;
+					Status st = workspace.allocate(bytes);
+					if (!st.ok()) return st;
+					launch.workspace = workspace.get();
+					owned_.push_back(std::move(workspace));
+				}
+			}
 			launches_.push_back(std::move(launch));
 			return Status();
 		}
