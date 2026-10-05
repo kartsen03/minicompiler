@@ -150,8 +150,8 @@ def gpu_matmul(results: str = "results/gpu") -> str:
     if not d:
         return "_Not recorded yet._"
     rows = ["| Shape (m × k × n) | Naive | Tiled | Register 128×128 | Register 64×64 | Vectorized | Double-buffered | "
-            "Split-K | cuBLAS | Default: % of cuBLAS | vs naive | % of FP32 peak |",
-            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
+            "Split-K | cuBLAS | Default: % of cuBLAS | vs naive | % of FP32 peak | SM clock |",
+            "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for r in d["results"]:
         k = {x["kernel"]: x for x in r["kernels"]}
         picked = r["auto_picks"]
@@ -167,7 +167,8 @@ def gpu_matmul(results: str = "results/gpu") -> str:
                     f"{g('register_tiled_64')} | {g('vectorized')} | {g('double_buffered')} | {split_cell} | "
                     f"{g('cublas')} | {p['percent_of_cublas']['median']:.0f}% ({p['percent_of_cublas']['min']:.0f}–"
                     f"{p['percent_of_cublas']['max']:.0f}) | {p['speedup_over_naive']['median']:.2f}x | "
-                    f"{p['percent_of_peak_at_measured_clock']['median']:.0f}% |")
+                    f"{p['percent_of_peak_at_measured_clock']['median']:.0f}% | "
+                    f"{r['sm_clock_mhz_median']['median']:,.0f} MHz |")
     peak = d["peak_fp32_gflops"]
     near = sum(all(x >= 0.97 for x in r["auto_vs_fastest_per_run"]) for r in d["results"])
     rows.append("")
@@ -175,12 +176,14 @@ def gpu_matmul(results: str = "results/gpu") -> str:
                 "the GPU alone, between event nodes captured with them into a CUDA graph, so the host's launch "
                 "overhead, which differs between cuBLAS and these kernels, is left out for all. Bold is the "
                 "backend's default: split-K where the output is too small to fill the GPU, otherwise "
-                f"double-buffered. In every run it was within 3% of the fastest of these kernels for {near} of "
-                f"{len(d['results'])} shapes. Every kernel, cuBLAS included, is checked against a float64 reference "
+                f"double-buffered. In every run it was within 3% of the fastest of the other kernels for {near} of "
+                f"{len(d['results'])} shapes (split-K that does not split is the double-buffered kernel itself, so it "
+                "does not count). Every kernel, cuBLAS included, is checked against a float64 reference "
                 "within the FP32 error bound before timing; cuBLAS runs in plain FP32 without TF32. Peak FP32 = 2 × "
                 f"SMs × FP32 lanes per SM × clock: {peak['at_max_sm_clock']:,.0f} GFLOP/s at the "
-                f"{peak['max_sm_clock_mhz']:.0f} MHz maximum; the last column uses the median SM clock measured "
-                "during each shape's runs. " + gpu_line(d))
+                f"{peak['max_sm_clock_mhz']:.0f} MHz maximum. The SM clock is the median measured during each "
+                "shape's runs, and the column before it uses it: the laptop's GPU slows under the sustained load of "
+                "the large shapes. " + gpu_line(d))
     return "\n".join(rows)
 
 
@@ -194,8 +197,8 @@ def gpu_tensor_core(results: str = "results/gpu") -> str:
     formats = [(f, label) for f, label in TENSOR_FORMATS
                if any(x["format"] == f for x in d["results"][0]["kernels"])]
     rows = ["| Shape (m × k × n) | FP32: default / cuBLAS | "
-            + " | ".join(f"{label}: ours / cuBLAS (ours as % of cuBLAS)" for _, label in formats) + " |",
-            "|---|---:|" + "---:|" * len(formats)]
+            + " | ".join(f"{label}: ours / cuBLAS (ours as % of cuBLAS)" for _, label in formats) + " | SM clock |",
+            "|---|---:|" + "---:|" * len(formats) + "---:|"]
     worst: dict[tuple[str, str], float] = {}
     for r in d["results"]:
         by = {(x["kernel"] if x["kernel"] == "cublas" else "ours", x["format"]): x for x in r["kernels"]}
@@ -210,6 +213,7 @@ def gpu_tensor_core(results: str = "results/gpu") -> str:
         for f, _ in formats:
             pct = by[("ours", f)]["percent_of_cublas_same_format"]
             cells.append(f"{t(('ours', f))} / {t(('cublas', f))} ({pct['median']:.0f}%)")
+        cells.append(f"{r['sm_clock_mhz_median']['median']:,.0f} MHz")
         rows.append(f"| {r['shape']} | " + " | ".join(cells) + " |")
     rows.append("")
     rows.append("| Inputs rounded to | Unit roundoff | Largest \\|c − exact\\| / Σ\\|ab\\|, ours | cuBLAS |")

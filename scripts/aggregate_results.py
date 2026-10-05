@@ -119,9 +119,12 @@ def aggregate_gpu_matmul(runs: list[dict]) -> dict:
         entry = {k: first[k] for k in ("shape", "m", "k", "n", "tiles_128x128", "auto_picks", "split_k_splits")}
         entry["sm_clock_mhz_median"] = spread([p["sm_clock_mhz_median"] for p in per_run])
         # The default kernel's speed against the fastest of minicompiler's kernels, in each run.
+        # split_k without a split launches the double-buffered kernel itself, so comparing the
+        # two would only measure noise.
         ratios = []
         for p in per_run:
-            ours = {x["kernel"]: x["gflops"] for x in p["kernels"] if x["kernel"] != "cublas"}
+            ours = {x["kernel"]: x["gflops"] for x in p["kernels"] if x["kernel"] != "cublas"
+                    and not (x["kernel"] == "split_k" and first["split_k_splits"] == 1)}
             ratios.append(ours[first["auto_picks"]] / max(ours.values()))
         entry["auto_vs_fastest_per_run"] = ratios
         kernels = []
