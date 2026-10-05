@@ -274,8 +274,8 @@ private:
 				             device_.name + " with this build: TF32 and BF16 need compute capability 8.0 and FP16 "
 				             "7.0, in the GPU and in CMAKE_CUDA_ARCHITECTURES"};
 			}
-			if (launch.matmul == MatmulKernel::SplitK) {
-				launch.splits = split_k_splits(launch.m, launch.n, launch.k, device_.sm_count);
+			if (uses_split_k(launch.matmul)) {
+				launch.splits = matmul_splits(launch.matmul, launch.m, launch.n, launch.k, device_.sm_count);
 				const std::size_t bytes = matmul_workspace_bytes(launch.matmul, launch.m, launch.n, launch.splits);
 				if (bytes > 0) {
 					DeviceBuffer workspace;

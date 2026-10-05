@@ -238,12 +238,23 @@ TEST(CudaBackend, TensorCoreKernelsThatCannotRunFailToCompile) {
 	}
 }
 
-TEST(CudaBackend, SplitKIsWithinTheDotProductErrorBoundForAnySplitCount) {
+TEST(CudaBackend, SplitKIsWithinTheErrorBoundForAnySplitCount) {
 	REQUIRE_GPU();
 	// Forced split counts, where the rule would pick one per shape: more splits
 	// than K has tiles, a last split shorter than the others, K below one tile,
 	// and shapes that take the element-by-element path (K or N not a multiple
-	// of 4). Splitting K only reorders the sum, so the usual bound holds.
+	// of 4). Splitting K only reorders the sum, so each kernel's usual bound
+	// holds: FP32's, or the tensor-core bound of its input format (see
+	// TensorCoreMatmulsAreWithinTheirPrecisionBounds).
+	struct Kernel {
+		cuda::MatmulKernel kernel;
+		double u;  // the inputs' unit roundoff, 0 for FP32
+		bool subnormals;
+	};
+	const Kernel kernels[] = {{cuda::MatmulKernel::SplitK, 0.0, false},
+	                          {cuda::MatmulKernel::TensorCoreTf32, std::ldexp(1.0, -11), false},
+	                          {cuda::MatmulKernel::TensorCoreBf16, std::ldexp(1.0, -8), false},
+	                          {cuda::MatmulKernel::TensorCoreF16, std::ldexp(1.0, -11), true}};
 	const std::vector<std::array<int, 3>> shapes = {
 		{33, 1000, 65}, {128, 2048, 512}, {16, 4099, 16}, {2, 12, 4}, {129, 260, 132}, {64, 5, 8}};
 	const double u = std::ldexp(1.0, -24);
@@ -270,22 +281,30 @@ TEST(CudaBackend, SplitKIsWithinTheDotProductErrorBoundForAnySplitCount) {
 		ASSERT_EQ(cudaMemcpy(da, a.data(), a_n * sizeof(float), cudaMemcpyHostToDevice), cudaSuccess);
 		ASSERT_EQ(cudaMemcpy(db, b.data(), b_n * sizeof(float), cudaMemcpyHostToDevice), cudaSuccess);
 		const double gamma = k * u / (1.0 - k * u);
-		for (int splits : {1, 2, 3, 7, 16, 64}) {
-			float* workspace = nullptr;
-			const std::size_t bytes = cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, m, n, splits);
-			if (bytes > 0) {
-				ASSERT_EQ(cudaMalloc(&workspace, bytes), cudaSuccess);
+		for (const Kernel& kn : kernels) {
+			if (kn.u > 0 && !cuda::tensor_core_supported(kn.kernel)) continue;
+			auto bound = [&](std::size_t i) {
+				if (kn.u == 0) return gamma * abs_dot[i] + u * std::fabs(exact[i]);
+				const double tiny = kn.subnormals ? 2.0 * k * std::ldexp(1.0, -25) : 0.0;
+				return (2.0 * kn.u + kn.u * kn.u + 2.0 * gamma) * abs_dot[i] + 2.0 * u * std::fabs(exact[i]) + tiny;
+			};
+			for (int splits : {1, 2, 3, 7, 16, 64}) {
+				float* workspace = nullptr;
+				const std::size_t bytes = cuda::matmul_workspace_bytes(kn.kernel, m, n, splits);
+				if (bytes > 0) {
+					ASSERT_EQ(cudaMalloc(&workspace, bytes), cudaSuccess);
+				}
+				ASSERT_EQ(cudaMemset(dc, 0xff, c_n * sizeof(float)), cudaSuccess);  // NaN, so unwritten outputs fail
+				ASSERT_EQ(cuda::launch_matmul(kn.kernel, da, db, dc, m, n, k, nullptr, splits, workspace), cudaSuccess);
+				std::vector<float> c(c_n);
+				ASSERT_EQ(cudaMemcpy(c.data(), dc, c_n * sizeof(float), cudaMemcpyDeviceToHost), cudaSuccess);
+				for (std::size_t i=0; i<c_n; ++i) {
+					ASSERT_LE(std::fabs(c[i] - exact[i]), bound(i))
+					    << cuda::matmul_kernel_name(kn.kernel) << " " << m << "x" << k << "x" << n << " with " << splits
+					    << " splits, element " << i;
+				}
+				if (workspace) cudaFree(workspace);
 			}
-			ASSERT_EQ(cudaMemset(dc, 0xff, c_n * sizeof(float)), cudaSuccess);  // NaN, so unwritten outputs fail
-			ASSERT_EQ(cuda::launch_matmul(cuda::MatmulKernel::SplitK, da, db, dc, m, n, k, nullptr, splits, workspace),
-			          cudaSuccess);
-			std::vector<float> c(c_n);
-			ASSERT_EQ(cudaMemcpy(c.data(), dc, c_n * sizeof(float), cudaMemcpyDeviceToHost), cudaSuccess);
-			for (std::size_t i=0; i<c_n; ++i) {
-				ASSERT_LE(std::fabs(c[i] - exact[i]), gamma * abs_dot[i] + u * std::fabs(exact[i]))
-				    << m << "x" << k << "x" << n << " with " << splits << " splits, element " << i;
-			}
-			if (workspace) cudaFree(workspace);
 		}
 		cudaFree(da);
 		cudaFree(db);
@@ -304,9 +323,23 @@ TEST(CudaBackend, SplitKSplitsSmallOutputsAcrossTheSms) {
 	EXPECT_EQ(cuda::split_k_splits(1024, 1024, 1024, 30), 1);  // 64 tiles fill the GPU
 	EXPECT_EQ(cuda::split_k_splits(128, 128, 200, 30), 3);     // 1 tile, but at least 64 of K per split
 	EXPECT_EQ(cuda::split_k_splits(128, 128, 100, 30), 1);     // K too short to split
+	// A kernel of which an SM holds one block: never a second wave.
+	EXPECT_EQ(cuda::split_k_splits(128, 512, 2048, 30, 1), 7);   // 4 tiles: as before, one block per SM
+	EXPECT_EQ(cuda::split_k_splits(128, 2048, 2048, 30, 1), 1);  // 16 tiles: a split would need two waves
+	EXPECT_EQ(cuda::split_k_splits(128, 1792, 2048, 30, 1), 2);  // 14 tiles, 28 blocks
+	for (int blocks_per_sm : {1, 2}) {
+		for (int tiles=1; tiles<=40; ++tiles) {
+			const int splits = cuda::split_k_splits(128, 128 * tiles, 1 << 16, 30, blocks_per_sm);
+			if (splits > 1) {
+				EXPECT_LE(tiles * splits, blocks_per_sm * 30) << tiles << " tiles, " << blocks_per_sm << " per SM";
+			}
+		}
+	}
 	EXPECT_EQ(cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, 128, 512, 15), 15u * 128 * 512 * 4);
 	EXPECT_EQ(cuda::matmul_workspace_bytes(cuda::MatmulKernel::SplitK, 128, 512, 1), 0u);
 	EXPECT_EQ(cuda::matmul_workspace_bytes(cuda::MatmulKernel::DoubleBuffered, 128, 512, 15), 0u);
+	EXPECT_EQ(cuda::matmul_workspace_bytes(cuda::MatmulKernel::TensorCoreF16, 128, 512, 7), 7u * 128 * 512 * 4);
+	EXPECT_EQ(cuda::matmul_workspace_bytes(cuda::MatmulKernel::Auto, 128, 512, 7), 0u);  // resolved first
 }
 
 TEST(CudaBackend, MatmulKernelNamesRoundTrip) {

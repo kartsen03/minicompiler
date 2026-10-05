@@ -2,6 +2,7 @@
 
 // Device helpers shared by the matmul kernels (CUDA sources only).
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 
@@ -36,6 +37,16 @@ inline bool aligned16(const void* p) {
 // float4 access needs every row of A, B and C to start 16-byte aligned.
 inline bool rows_aligned(const float* a, const float* b, const float* c, int n, int k) {
 	return n % 4 == 0 && k % 4 == 0 && aligned16(a) && aligned16(b) && aligned16(c);
+}
+
+// Split-K: the K each split covers, in whole tiles of `bk`, so that every
+// split but the last covers the same K; and how many splits that makes (at
+// most `splits`). Block z of a grid that deep covers K from z * k_split.
+inline int split_size(int k, int splits, int bk) {
+	return splits > 1 ? ((k + splits - 1) / splits + bk - 1) / bk * bk : std::max(k, 1);
+}
+inline int split_depth(int k, int k_split) {
+	return std::max(1, (k + k_split - 1) / k_split);
 }
 
 }

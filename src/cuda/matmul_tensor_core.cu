@@ -85,12 +85,14 @@ constexpr int kArch = 0;
 // current tile's mma and stored after them. Rows are padded by 16 bytes, the
 // usual remedy for bank conflicts in fragment loads. Accumulators leave
 // through a per-warp 16x16 scratch tile, so edge tiles store with bounds
-// checks and C needs no alignment. The kernel has a body only in device code
-// for an architecture with P's format.
+// checks and C needs no alignment. Split-K as in the SIMT kernel: block z of
+// the grid's depth covers K from z * k_split, and with a depth above 1 writes
+// its partial product to slice z of `partial`. The kernel has a body only in
+// device code for an architecture with P's format.
 template <typename P, bool kVec>
 __global__ void __launch_bounds__(kTcThreads)
 matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, float* __restrict__ c, int m, int n,
-                   int k) {
+                   int k, int k_split, float* __restrict__ partial) {
 #if defined(MC_HAVE_WMMA)
 	if constexpr (kArch >= P::kMinArch) {
 		using S = typename P::Smem;
@@ -104,6 +106,8 @@ matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, flo
 		const int warp = threadIdx.x / 32, lane = threadIdx.x % 32;
 		const int warp_row = (warp / 4) * 64, warp_col = (warp % 4) * 32;
 		const int block_row = blockIdx.y * kTcBM, block_col = blockIdx.x * kTcBN;
+		const int k_begin = blockIdx.z * k_split;
+		const int k_end = min(k, k_begin + k_split);
 
 		wmma::fragment<wmma::accumulator, 16, 16, kK, float> acc[4][2];
 #pragma unroll
@@ -120,12 +124,12 @@ matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, flo
 #pragma unroll
 			for (int l=0; l<kA4; ++l) {
 				const int f = threadIdx.x + l * kTcThreads;
-				ra[l] = load4<kVec>(a, block_row + f / (BK / 4), k0 + (f % (BK / 4)) * 4, m, k, k);
+				ra[l] = load4<kVec>(a, block_row + f / (BK / 4), k0 + (f % (BK / 4)) * 4, m, k_end, k);
 			}
 #pragma unroll
 			for (int l=0; l<kB4; ++l) {
 				const int f = threadIdx.x + l * kTcThreads;
-				rb[l] = load4<kVec>(b, k0 + f / (kTcBN / 4), block_col + (f % (kTcBN / 4)) * 4, k, n, n);
+				rb[l] = load4<kVec>(b, k0 + f / (kTcBN / 4), block_col + (f % (kTcBN / 4)) * 4, k_end, n, n);
 			}
 		};
 		auto store = [&](int s) {
@@ -149,14 +153,14 @@ matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, flo
 			}
 		};
 
-		const int tiles = (k + BK - 1) / BK;
-		load(0);
+		const int tiles = (k_end - k_begin + BK - 1) / BK;
+		load(k_begin);
 		store(0);
 		__syncthreads();
 		for (int t=0; t<tiles; ++t) {
 			const int cur = t & 1;
 			const bool more = t + 1 < tiles;
-			if (more) load((t + 1) * BK);
+			if (more) load(k_begin + (t + 1) * BK);
 #pragma unroll
 			for (int kk=0; kk<BK; kk+=kK) {
 				wmma::fragment<wmma::matrix_a, 16, 16, kK, typename P::Frag, wmma::row_major> af[4];
@@ -176,6 +180,8 @@ matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, flo
 			__syncthreads();
 		}
 
+		// Chosen after the loop, so the pointer does not hold registers during it.
+		float* __restrict__ out = gridDim.z == 1 ? c : partial + static_cast<std::ptrdiff_t>(blockIdx.z) * m * n;
 		float (&sc)[16][16] = scratch[warp];
 		const int r = lane / 2, c0 = (lane % 2) * 8;  // each lane copies 8 consecutive floats of a row
 #pragma unroll
@@ -187,7 +193,7 @@ matmul_tensor_core(const float* __restrict__ a, const float* __restrict__ b, flo
 				const int gr = block_row + warp_row + i * 16 + r;
 				const int gc = block_col + warp_col + j * 16 + c0;
 				if (gr < m) {
-					float* dst = c + static_cast<std::ptrdiff_t>(gr) * n + gc;
+					float* dst = out + static_cast<std::ptrdiff_t>(gr) * n + gc;
 #pragma unroll
 					for (int q=0; q<8; ++q) {
 						if (gc + q < n) dst[q] = sc[r][c0 + q];
@@ -215,15 +221,33 @@ bool supported() {
 }
 
 template <typename P>
-cudaError_t launch(const float* a, const float* b, float* c, int m, int n, int k, cudaStream_t stream) {
-	if (!supported<P>()) return cudaErrorNotSupported;
-	const dim3 grid((n + kTcBN - 1) / kTcBN, (m + kTcBM - 1) / kTcBM);
-	if (rows_aligned(a, b, c, n, k)) {
-		matmul_tensor_core<P, true><<<grid, kTcThreads, 0, stream>>>(a, b, c, m, n, k);
-	} else {
-		matmul_tensor_core<P, false><<<grid, kTcThreads, 0, stream>>>(a, b, c, m, n, k);
+int blocks_per_sm() {
+	int blocks = 0;
+	if (cudaOccupancyMaxActiveBlocksPerMultiprocessor(&blocks, matmul_tensor_core<P, true>, kTcThreads, 0) !=
+	    cudaSuccess) {
+		cudaGetLastError();
+		return 1;
 	}
-	return cudaGetLastError();
+	return std::max(blocks, 1);
+}
+
+template <typename P>
+cudaError_t launch(const float* a, const float* b, float* c, int m, int n, int k, cudaStream_t stream, int splits,
+                   float* workspace) {
+	if (!supported<P>()) return cudaErrorNotSupported;
+	const int k_split = split_size(k, splits, 2 * P::kK);
+	const int depth = split_depth(k, k_split);
+	if (depth > 1 && !workspace) return cudaErrorInvalidValue;
+	const dim3 grid((n + kTcBN - 1) / kTcBN, (m + kTcBM - 1) / kTcBM, depth);
+	const bool vec = rows_aligned(a, b, c, n, k) && (depth == 1 || aligned16(workspace));
+	if (vec) {
+		matmul_tensor_core<P, true><<<grid, kTcThreads, 0, stream>>>(a, b, c, m, n, k, k_split, workspace);
+	} else {
+		matmul_tensor_core<P, false><<<grid, kTcThreads, 0, stream>>>(a, b, c, m, n, k, k_split, workspace);
+	}
+	const cudaError_t err = cudaGetLastError();
+	if (err != cudaSuccess || depth == 1) return err;
+	return sum_split_partials(workspace, c, static_cast<std::size_t>(m) * n, depth, vec, stream);
 }
 
 }
@@ -237,12 +261,22 @@ bool tensor_core_supported(MatmulKernel kernel) {
 	}
 }
 
-cudaError_t launch_tensor_core(MatmulKernel kernel, const float* a, const float* b, float* c, int m, int n, int k,
-                               cudaStream_t stream) {
+int tensor_core_blocks_per_sm(MatmulKernel kernel) {
+	if (!tensor_core_supported(kernel)) return 1;
 	switch (kernel) {
-		case MatmulKernel::TensorCoreTf32: return launch<Tf32>(a, b, c, m, n, k, stream);
-		case MatmulKernel::TensorCoreBf16: return launch<Bf16>(a, b, c, m, n, k, stream);
-		case MatmulKernel::TensorCoreF16: return launch<F16>(a, b, c, m, n, k, stream);
+		case MatmulKernel::TensorCoreTf32: return blocks_per_sm<Tf32>();
+		case MatmulKernel::TensorCoreBf16: return blocks_per_sm<Bf16>();
+		case MatmulKernel::TensorCoreF16: return blocks_per_sm<F16>();
+		default: return 1;
+	}
+}
+
+cudaError_t launch_tensor_core(MatmulKernel kernel, const float* a, const float* b, float* c, int m, int n, int k,
+                               cudaStream_t stream, int splits, float* workspace) {
+	switch (kernel) {
+		case MatmulKernel::TensorCoreTf32: return launch<Tf32>(a, b, c, m, n, k, stream, splits, workspace);
+		case MatmulKernel::TensorCoreBf16: return launch<Bf16>(a, b, c, m, n, k, stream, splits, workspace);
+		case MatmulKernel::TensorCoreF16: return launch<F16>(a, b, c, m, n, k, stream, splits, workspace);
 		default: return cudaErrorInvalidValue;
 	}
 }

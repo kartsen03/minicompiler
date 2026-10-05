@@ -314,16 +314,11 @@ sum_splits(const float* __restrict__ partial, float* __restrict__ c, std::size_t
 	}
 }
 
-// K per split: whole tiles, so every split but the last covers the same K.
-int split_size(int k, int splits, int bk) {
-	return splits > 1 ? ((k + splits - 1) / splits + bk - 1) / bk * bk : std::max(k, 1);
-}
-
 template <int BK, bool kDoubleBuffer>
 cudaError_t launch_vectorized(const float* a, const float* b, float* c, int m, int n, int k, cudaStream_t stream,
                               int splits = 1, float* workspace = nullptr) {
 	const int k_split = split_size(k, splits, BK);
-	const int depth = std::max(1, (k + k_split - 1) / k_split);  // at most `splits`
+	const int depth = split_depth(k, k_split);
 	if (depth > 1 && !workspace) return cudaErrorInvalidValue;
 	const dim3 grid((n + kVecBN - 1) / kVecBN, (m + kVecBM - 1) / kVecBM, depth);
 	const bool vec = rows_aligned(a, b, c, n, k) && (depth == 1 || aligned16(workspace));
@@ -337,20 +332,24 @@ cudaError_t launch_vectorized(const float* a, const float* b, float* c, int m, i
 	if (depth == 1) return cudaGetLastError();
 	const cudaError_t err = cudaGetLastError();
 	if (err != cudaSuccess) return err;
-	const std::size_t count = static_cast<std::size_t>(m) * n;
+	return sum_split_partials(workspace, c, static_cast<std::size_t>(m) * n, depth, vec, stream);
+}
+
+}
+
+cudaError_t sum_split_partials(const float* partial, float* c, std::size_t count, int splits, bool vec,
+                               cudaStream_t stream) {
 	const std::size_t items = vec ? count / 4 : count;
 	const unsigned blocks = static_cast<unsigned>(std::min<std::size_t>((items + 255) / 256, 4096));
 	if (vec) {
-		sum_splits<true><<<blocks, 256, 0, stream>>>(workspace, c, count, depth);
+		sum_splits<true><<<blocks, 256, 0, stream>>>(partial, c, count, splits);
 	} else {
-		sum_splits<false><<<blocks, 256, 0, stream>>>(workspace, c, count, depth);
+		sum_splits<false><<<blocks, 256, 0, stream>>>(partial, c, count, splits);
 	}
 	return cudaGetLastError();
 }
 
-}
-
-int split_k_splits(int m, int n, int k, int sm_count) {
+int split_k_splits(int m, int n, int k, int sm_count, int blocks_per_sm) {
 	const std::int64_t tiles = ((static_cast<std::int64_t>(m) + kVecBM - 1) / kVecBM) *
 	                           ((static_cast<std::int64_t>(n) + kVecBN - 1) / kVecBN);
 	const std::int64_t sms = sm_count;
@@ -359,14 +358,27 @@ int split_k_splits(int m, int n, int k, int sm_count) {
 	if (5 * tiles >= 4 * sms) return 1;
 	// Up to half the SMs' worth of tiles: one block per SM, since a second block
 	// on only some SMs makes a tail that the rest wait for. Beyond that, two
-	// splits would already overflow one block per SM, so split for up to two.
-	std::int64_t splits = 2 * tiles <= sms ? sms / tiles : 2 * sms / tiles;
+	// splits would already overflow one block per SM, so split for up to two
+	// where an SM holds two; where it holds one, a second wave would cost more
+	// than the split saves.
+	std::int64_t splits = 2 * tiles <= sms || blocks_per_sm < 2 ? sms / tiles : 2 * sms / tiles;
 	splits = std::min(splits, static_cast<std::int64_t>(k / 64));  // at least 64 of K per split
 	return static_cast<int>(std::max<std::int64_t>(splits, 1));
 }
 
+bool uses_split_k(MatmulKernel kernel) {
+	return kernel == MatmulKernel::SplitK || kernel == MatmulKernel::TensorCoreTf32 ||
+	       kernel == MatmulKernel::TensorCoreBf16 || kernel == MatmulKernel::TensorCoreF16;
+}
+
+int matmul_splits(MatmulKernel kernel, int m, int n, int k, int sm_count) {
+	if (kernel == MatmulKernel::SplitK) return split_k_splits(m, n, k, sm_count);
+	if (uses_split_k(kernel)) return split_k_splits(m, n, k, sm_count, tensor_core_blocks_per_sm(kernel));
+	return 1;
+}
+
 std::size_t matmul_workspace_bytes(MatmulKernel kernel, int m, int n, int splits) {
-	if (kernel != MatmulKernel::SplitK || splits <= 1) return 0;
+	if (!uses_split_k(kernel) || splits <= 1) return 0;
 	return static_cast<std::size_t>(splits) * m * n * sizeof(float);
 }
 
@@ -397,7 +409,8 @@ cudaError_t launch_matmul(MatmulKernel kernel, const float* a, const float* b, f
 		case MatmulKernel::SplitK: return launch_vectorized<8, true>(a, b, c, m, n, k, stream, splits, workspace);
 		case MatmulKernel::TensorCoreTf32:
 		case MatmulKernel::TensorCoreBf16:
-		case MatmulKernel::TensorCoreF16: return launch_tensor_core(kernel, a, b, c, m, n, k, stream);
+		case MatmulKernel::TensorCoreF16:
+			return launch_tensor_core(kernel, a, b, c, m, n, k, stream, splits, workspace);
 		case MatmulKernel::Auto: break;  // must be resolved to a kernel first
 	}
 	return cudaErrorInvalidValue;

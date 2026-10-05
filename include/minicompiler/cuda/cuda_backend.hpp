@@ -30,7 +30,7 @@ enum class MatmulKernel {
 	// rounded to TF32 or FP16 (unit roundoff 2^-11) or BF16 (2^-8) and the
 	// products accumulated in FP32, so each output is within about
 	// (2u + k 2^-24) sum|a b| of the exact dot product. TF32 and BF16 need
-	// compute capability 8.0, FP16 7.0.
+	// compute capability 8.0, FP16 7.0. They split K where SplitK does.
 	TensorCoreTf32,
 	TensorCoreBf16,
 	TensorCoreF16,
