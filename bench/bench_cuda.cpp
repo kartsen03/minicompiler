@@ -87,10 +87,19 @@ struct Variant {
 	double bytes = 0;
 };
 
+// A laptop GPU idles at a few hundred MHz and needs about half a second of
+// sustained work to reach its boost clock, so warm-up is measured in time:
+// keep calling `round` until `seconds` have passed.
+template <typename Fn>
+void warm_up_for(double seconds, Fn&& round) {
+	const auto until = std::chrono::steady_clock::now() + std::chrono::duration<double>(seconds);
+	while (std::chrono::steady_clock::now() < until) round();
+}
+
 // Times the variants in interleaved rounds with CUDA events on `stream`,
 // sampling the SM clock after every round (while the GPU is under load).
-void time_interleaved(std::vector<Variant>& variants, cudaStream_t stream, int warmup, double seconds,
-                      std::vector<double>& clocks) {
+void time_interleaved(std::vector<Variant>& variants, cudaStream_t stream, int warmup, double warmup_seconds,
+                      double seconds, std::vector<double>& clocks) {
 	cudaEvent_t start, stop;
 	CHECK_CUDA(cudaEventCreate(&start));
 	CHECK_CUDA(cudaEventCreate(&stop));
@@ -106,6 +115,9 @@ void time_interleaved(std::vector<Variant>& variants, cudaStream_t stream, int w
 	for (Variant& v : variants) {
 		for (int i=0; i<warmup; ++i) once(v);
 	}
+	warm_up_for(warmup_seconds, [&] {
+		for (Variant& v : variants) once(v);
+	});
 	double round_ms = 0;
 	for (Variant& v : variants) round_ms += once(v);
 	const int rounds = std::clamp(static_cast<int>(seconds * 1000.0 / std::max(round_ms, 1e-3)), 30, 5000);
@@ -133,7 +145,8 @@ double max_normwise_diff(const std::vector<std::vector<float>>& a, const std::ve
 	return worst;
 }
 
-int run_elementwise(const std::string& graph_dir, const std::string& out_path, double seconds) {
+int run_elementwise(const std::string& graph_dir, const std::string& out_path, double warmup_seconds,
+                    double seconds) {
 	const cuda::DeviceInfo device = must(cuda::query_device(0), "query_device");
 	CHECK_CUDA(cudaSetDevice(0));
 	cudaStream_t stream;
@@ -155,9 +168,12 @@ int run_elementwise(const std::string& graph_dir, const std::string& out_path, d
 	json.begin_object();
 	json.field("benchmark", "GELU chain on the GPU: one kernel per op (unfused) vs one fused kernel");
 	json.field("method", "CUDA events around each enqueue of the whole graph on one stream; inputs already on the "
-	                     "device; 10 warmup enqueues per variant, then interleaved rounds (rotating order); "
+	                     "device; 10 warmup enqueues per variant and warm-up rounds until the GPU has been busy for "
+	                     "warmup_seconds (it boosts only under sustained load), then interleaved rounds (rotating "
+	                     "order); "
 	                     "time = median over rounds; speedup = median over rounds of unfused/fused in the same round; "
 	                     "bandwidth = bytes each kernel reads and writes / median time");
+	json.field("warmup_seconds", warmup_seconds).field("seconds_per_config", seconds);
 	bench::write_environment(json);
 	json.key("results").begin_array();
 	std::printf("%-22s %-8s %8s %12s %12s %10s %9s\n", "size", "variant", "kernels", "median ms", "GB/s", "% of peak",
@@ -177,7 +193,7 @@ int run_elementwise(const std::string& graph_dir, const std::string& out_path, d
 			must(v.exe->upload_inputs(in), "upload");
 			variants.push_back(std::move(v));
 		}
-		time_interleaved(variants, stream, 10, seconds, clocks);
+		time_interleaved(variants, stream, 10, warmup_seconds, seconds, clocks);
 
 		// The two variants must agree before their times mean anything.
 		std::vector<std::vector<std::vector<float>>> outs;
@@ -278,7 +294,7 @@ bool within_error_bound(const std::vector<float>& a, const std::vector<float>& b
 	return true;
 }
 
-int run_matmul(const std::string& out_path, double seconds) {
+int run_matmul(const std::string& out_path, double warmup_seconds, double seconds) {
 	const cuda::DeviceInfo device = must(cuda::query_device(0), "query_device");
 	CHECK_CUDA(cudaSetDevice(0));
 	cudaStream_t stream;
@@ -316,13 +332,15 @@ int run_matmul(const std::string& out_path, double seconds) {
 	json.begin_object();
 	json.field("benchmark", "FP32 matmul C[m,n] = A[m,k] B[k,n] (row-major): naive, shared-memory tiled and "
 	                        "register-tiled (128x128 and 64x64 tiles) kernels against cuBLAS");
-	json.field("method", "CUDA events around each kernel on one stream; 3 warmup runs per variant, then interleaved "
-	                     "rounds (rotating order); time = median over rounds; GFLOP/s = 2mnk / time; ratios are "
+	json.field("method", "CUDA events around each kernel on one stream; 3 warmup runs per variant and warm-up "
+	                     "rounds until the GPU has been busy for warmup_seconds, then interleaved rounds (rotating "
+	                     "order); time = median over rounds; GFLOP/s = 2mnk / time; ratios are "
 	                     "medians over rounds of per-round ratios. Each kernel's result is checked on 1000 sampled "
 	                     "elements against a float64 dot product within the FP32 error bound. cuBLAS runs in "
 	                     "CUBLAS_DEFAULT_MATH with NVIDIA_TF32_OVERRIDE=0 (no TF32 tensor cores). "
 	                     "register_tiled_picks is the tile size the backend's register_tiled kernel uses for the "
 	                     "shape: 64x64 when the output has fewer 128x128 tiles than the GPU has SMs");
+	json.field("warmup_seconds", warmup_seconds).field("seconds_per_config", seconds);
 	bench::write_environment(json);
 	json.key("peak_fp32_gflops").begin_object();
 	json.field("at_max_sm_clock", peak_at_max_clock).field("max_sm_clock_mhz", max_clock);
@@ -385,11 +403,14 @@ int run_matmul(const std::string& out_path, double seconds) {
 			CHECK_CUDA(cudaEventElapsedTime(&ms, start, stop));
 			return static_cast<double>(ms);
 		};
-		double round_ms = 0;
 		for (MatmulVariant& v : variants) {
 			for (int i=0; i<3; ++i) once(v);
-			round_ms += once(v);
 		}
+		warm_up_for(warmup_seconds, [&] {
+			for (MatmulVariant& v : variants) once(v);
+		});
+		double round_ms = 0;
+		for (MatmulVariant& v : variants) round_ms += once(v);
 		const int rounds = std::clamp(static_cast<int>(seconds * 1000.0 / std::max(round_ms, 1e-3)), 10, 2000);
 		const std::size_t first_clock = clocks.size();
 		for (int r=0; r<rounds; ++r) {
@@ -463,6 +484,7 @@ int main(int argc, char** argv) {
 	std::string out_path;
 	std::string graph_dir = std::string(MINICOMPILER_SOURCE_DIR) + "/bench/graphs";
 	double seconds = 2.0;
+	double warmup_seconds = 1.0;
 	for (int i=1; i<argc; ++i) {
 		const std::string a = argv[i];
 		if (a == "--suite" && i + 1 < argc) {
@@ -473,6 +495,7 @@ int main(int argc, char** argv) {
 			graph_dir = argv[++i];
 		} else if (a == "--quick") {
 			seconds = 0.2;
+			warmup_seconds = 0.2;
 		} else {
 			std::cerr << "usage: bench_cuda [--suite elementwise|matmul] [--out FILE] [--graphs DIR] [--quick]\n";
 			return 1;
@@ -481,8 +504,8 @@ int main(int argc, char** argv) {
 	if (out_path.empty()) out_path = "results/gpu/" + suite + ".json";
 	// Before CUDA starts: keep every library on plain FP32 arithmetic.
 	setenv("NVIDIA_TF32_OVERRIDE", "0", 1);
-	if (suite == "elementwise") return run_elementwise(graph_dir, out_path, seconds);
-	if (suite == "matmul") return run_matmul(out_path, seconds);
+	if (suite == "elementwise") return run_elementwise(graph_dir, out_path, warmup_seconds, seconds);
+	if (suite == "matmul") return run_matmul(out_path, warmup_seconds, seconds);
 	std::cerr << "unknown suite '" << suite << "'\n";
 	return 1;
 }
