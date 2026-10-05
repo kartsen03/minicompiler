@@ -6,7 +6,8 @@ A small compiler for ML compute graphs, written in C++17. It reads a graph
 program, builds a DAG intermediate representation, optimizes it with
 dead-node elimination, constant folding and elementwise operator fusion,
 plans buffer reuse from value lifetimes, and executes the result on an
-Eigen-based CPU backend.
+Eigen-based CPU backend or a CUDA backend that generates one kernel per
+fused group.
 
 ```mermaid
 flowchart LR
@@ -14,6 +15,9 @@ flowchart LR
     ir --> passes["passes: dne → fold → dne → fuse → dne"]
     passes --> plan["memory planner (lifetime-based buffer reuse)"]
     plan --> cpu["Eigen CPU backend"]
+    plan --> cuda["CUDA backend"]
+    cuda --> gen["one generated kernel per fused group (NVRTC)"]
+    cuda --> mm["matmul kernels: naive, tiled, register-tiled"]
     passes -. "per-pass dump" .-> dot["Graphviz DOT / SVG"]
 ```
 
@@ -38,6 +42,24 @@ build/tools/mcc bench/graphs/mlp_block.mcg --run               # run on seeded r
 build/tools/mcc bench/graphs/mlp_block.mcg --dump-dot out/     # one DOT file per stage
 build/tools/mcc bench/graphs/gelu_chain.mcg --bench            # timing as JSON
 ```
+
+### With the CUDA backend
+
+If CMake finds a CUDA toolkit, the CUDA backend is built too (the configure
+step says which); without one, or with `-DMINICOMPILER_ENABLE_CUDA=OFF`, the
+build is CPU-only. CI builds it with CUDA 12.6 and 13.4; the results below
+were measured with 13.1. The matmul kernels are compiled ahead of time for the
+local GPU (`CMAKE_CUDA_ARCHITECTURES=native` by default with CMake 3.24 or
+newer, otherwise sm_75 and sm_86); the elementwise and fused kernels are
+generated and compiled at run time by NVRTC for whatever GPU is present.
+
+```bash
+build/tools/mcc bench/graphs/mlp_block.mcg --backend cuda --run   # run on the GPU
+build/tools/mcc bench/graphs/gelu_chain.mcg --emit-cuda           # the generated CUDA source
+```
+
+To rebuild and re-measure everything on a Colab GPU, see
+[Reproducing the GPU results on Colab](#reproducing-the-gpu-results-on-colab).
 
 ## How it works
 
@@ -82,6 +104,24 @@ elements), so intermediates stay in cache-resident 2 KB buffers instead of
 making a round trip through memory for every op. Intermediate buffers are
 assigned by a lifetime-based planner and reused, and graph outputs are
 written straight into the caller's tensors.
+
+**CUDA backend** ([`src/cuda/`](src/cuda)). Every elementwise op or fused
+group becomes one kernel. The generator turns the group's per-element program
+into CUDA C++ with the shapes baked in: broadcast index math uses constant
+divisors, scalar operands are hoisted out of the loop, constants are emitted
+as exact bit patterns, and the kernel uses `float4` loads and stores when
+every input's layout allows it. NVRTC compiles the source straight to a cubin
+for the GPU's exact architecture, a process-wide cache keeps each kernel
+compiled once, and the launch is a grid-stride loop sized to one wave of
+resident blocks. Matmuls run hand-written kernels: naive (one thread per
+output), shared-memory tiled (32×32), and register-tiled, which comes in two
+sizes: 128×128 tiles with an 8×8 block of outputs per thread, or 64×64 tiles
+with 4×4 per thread when the 128×128 tiles would keep at most three quarters
+of the SMs busy. Device memory follows the same lifetime plan as on the CPU:
+intermediates and outputs share reused buffers, inputs and constants get
+their own (constants are uploaded once, at compile time), and a run copies
+only the inputs in and the outputs out. `CudaExecutable::enqueue(stream)`
+launches the kernels alone, on any stream, which is what the benchmarks time.
 
 ## The IR before and after optimization
 
@@ -200,26 +240,220 @@ What this shows:
   `torch.compile`: ahead at batch 512 (1.06–1.17x), behind at batch 32 with
   the tuned allocator (0.86–0.94x).
 
+## Results: the CUDA backend
+
+Measured on an RTX 3060 Laptop GPU (30 SMs, compute capability 8.6, a
+192-bit memory bus at 7001 MHz, all queried at run time) under WSL2 with the
+Windows "Turbo" power plan, by
+[`scripts/run_gpu_benchmarks.sh`](scripts/run_gpu_benchmarks.sh): three runs
+of each benchmark, every variant timed in interleaved rounds with CUDA events,
+the tables showing the median across runs and the range. Peaks come from the
+device's own properties at run time, not a spec sheet. A laptop GPU's clock
+follows its power and temperature, so each table also records the SM clock
+sampled during the runs.
+
+### Fusion on the GPU
+
+The GELU chain compiled without fusion (nine kernels, one per op, after
+folding) and with it (one kernel), inputs already on the device
+([`bench/bench_cuda.cpp`](bench/bench_cuda.cpp)):
+
+<!-- BEGIN gpu-elementwise -->
+| GELU chain size | Unfused: kernels, time, bandwidth (% of peak) | Fused: time, bandwidth (% of peak) | Fused speedup (range over runs) |
+|---|---:|---:|---:|
+| 1x4096 (16 KB) | 9 kernels, 0.059 ms, 6 GB/s (2%) | 0.0082 ms, 4 GB/s (1%) | 6.10x (5.98–6.96) |
+| 16x4096 (256 KB) | 9 kernels, 0.120 ms, 46 GB/s (14%) | 0.017 ms, 30 GB/s (9%) | 7.00x (7.00–7.12) |
+| 256x4096 (4 MB) | 9 kernels, 0.370 ms, 238 GB/s (71%) | 0.039 ms, 216 GB/s (64%) | 9.24x (9.22–9.33) |
+| 1024x4096 (16 MB) | 9 kernels, 1.14 ms, 308 GB/s (92%) | 0.115 ms, 293 GB/s (87%) | 10.02x (10.00–10.12) |
+| 4096x4096 (64 MB) | 9 kernels, 4.49 ms, 314 GB/s (93%) | 0.434 ms, 309 GB/s (92%) | 10.36x (10.36–10.38) |
+| 16384x4096 (256 MB) | 9 kernels, 18.0 ms, 314 GB/s (93%) | 1.71 ms, 313 GB/s (93%) | 10.49x (10.49–10.50) |
+
+Times are CUDA-event medians with the input already on the device, over 3 runs (median across runs). Bandwidth counts the bytes each kernel must read and write once; peak = 2 × memory clock × bus width = 336 GB/s, from the device properties. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 210–2025 MHz (median 1425); CUDA runtime 13.1, driver API 13.1; host compiler: gcc 13.3.0; Windows power plan: Turbo; commit 3b6c819.
+<!-- END gpu-elementwise -->
+
+From 16 MB up the fused kernel is 10.0–10.5x faster, and from 64 MB up both
+versions run at 92–93% of the peak bandwidth: each is as fast as DRAM allows.
+The unfused chain makes 21 passes over tensors the size of the input (each op
+reads its operands and writes its result), the fused kernel 2 (read `x`,
+write `y`), so the speedup is the traffic fusion removes. At 16 KB and
+256 KB a kernel is mostly launch overhead, and fusing nine launches into one
+gives 6.1–7.0x.
+
+### Matmul kernels against cuBLAS
+
+<!-- BEGIN gpu-matmul -->
+| Shape (m × k × n) | 128×128 tiles | Naive | Tiled | Register 128×128 | Register 64×64 | cuBLAS | Picked tile: % of cuBLAS | vs naive | % of FP32 peak |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 512^3 | 16 | 827 | 1,016 | 2,064 | **2,241** | 3,277 | 67% (63–73) | 2.72x | 16% |
+| 640^3 | 25 | 800 | 955 | **2,960** | 2,768 | 4,236 | 69% (68–82) | 3.69x | 22% |
+| 1024^3 | 64 | 710 | 823 | **2,785** | 2,330 | 6,150 | 48% (44–48) | 3.93x | 24% |
+| 2048^3 | 256 | 658 | 765 | **3,745** | 2,653 | 6,612 | 58% (58–59) | 5.74x | 35% |
+| 4096^3 | 1024 | 510 | 752 | **4,191** | 2,431 | 5,802 | 72% (68–74) | 7.82x | 43% |
+| 1000^3 (not a tile multiple) | 64 | 701 | 757 | **2,625** | 2,225 | 5,711 | 44% (44–45) | 3.77x | 23% |
+| 1023x1029x1031 (odd) | 72 | 662 | 736 | **2,642** | 2,234 | 5,361 | 49% (48–55) | 3.98x | 24% |
+| 256x1024x1024 (matmul_bias_relu) | 16 | 755 | 876 | 1,771 | **1,893** | 4,520 | 45% (42–48) | 2.51x | 15% |
+| 128x512x2048 (MLP layer 1, B=128) | 16 | 779 | 907 | 1,809 | **1,886** | 2,759 | 68% (63–73) | 2.42x | 14% |
+| 128x2048x512 (MLP layer 2, B=128) | 4 | 755 | 732 | 496 | **566** | 3,361 | 18% (16–19) | 0.75x | 4% |
+| 512x2048x512 (MLP layer 2, B=512) | 16 | 722 | 840 | 1,679 | **1,830** | 5,668 | 32% (31–34) | 2.55x | 15% |
+
+GFLOP/s = 2mnk / CUDA-event median, median across 3 runs; bold is the tile size the backend picks (64×64 when 128×128 tiles would keep at most three quarters of the 30 SMs busy). That pick was the faster register tile in every run for 11 of 11 shapes. Every kernel, cuBLAS included, is checked against a float64 reference within the FP32 error bound before timing; cuBLAS runs in plain FP32 without TF32. Peak FP32 = 2 × SMs × FP32 lanes per SM × clock: 16,128 GFLOP/s at the 2100 MHz maximum; the last column uses the median SM clock measured during each shape's runs. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 900–1987 MHz (median 1770); CUDA runtime 13.1, driver API 13.1; host compiler: gcc 13.3.0; Windows power plan: Turbo; commit 3b6c819.
+<!-- END gpu-matmul -->
+
+Each kernel captures more data reuse than the last:
+
+- **32×32 shared-memory tiles** are only 1.08–1.49x faster than the naive
+  kernel here. Ampere's L1 and L2 caches already catch much of the reuse the
+  naive kernel misses, and the tiled kernel still does two shared-memory
+  loads per multiply-add, so shared memory becomes its limit.
+- **Register tiling** keeps an 8×8 (or 4×4) block of outputs per thread in
+  registers, for 4 (or 2) multiply-adds per shared-memory load: 2.4–7.8x
+  faster than naive on every shape but one, and 44–72% of cuBLAS on the
+  square and odd shapes. At 4096³ that is 4,191 GFLOP/s, 43% of peak FP32 at
+  the measured clock, where cuBLAS reaches 60%.
+- **64×64 tiles** beat 128×128 by 4–14% on the five shapes with 16 or fewer
+  128×128 tiles, by spreading the work over all 30 SMs.
+
+The weak spot is the B=128 MLP's second layer (128×2048×512): 4 tiles of
+128×128, or 16 of 64×64, for 30 SMs, so most of the GPU idles and even the
+naive kernel, with 256 blocks, is faster. cuBLAS is 5.9x faster there; in the
+[profile](#where-the-time-goes) of the same layer inside PyTorch it runs a
+kernel that splits K four ways. Elsewhere cuBLAS's lead comes from
+double-buffered loads that overlap memory and math, wider loads and stores,
+and per-shape kernel selection.
+
+### Against PyTorch on the same GPU
+
+The same graphs, seeded weights and inputs as the CPU comparison, plus larger
+sizes, all variants in one process on one CUDA stream
+([`bench/torch_compare.py --device cuda`](bench/torch_compare.py)). "torch.compile,
+CUDA graphs" is `mode="reduce-overhead"`. Every PyTorch output matches
+minicompiler's to within 1.7e-6 of the output's largest magnitude.
+
+<!-- BEGIN gpu-torch -->
+| Graph | Size | minicompiler | PyTorch eager (same ops) | PyTorch eager (idiomatic) | torch.compile | torch.compile, CUDA graphs | SM clock |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `gelu_chain` | 1x4096 (16 KB) | 0.028 ms | 0.264 ms, 7.69x (7.16–7.80) | 0.053 ms, 1.41x (1.39–1.50) | 0.203 ms, 6.12x (4.97–6.76) | 0.267 ms, 8.35x (6.37–9.16) | 300 MHz |
+| `gelu_chain` | 256x4096 (4 MB) | 0.044 ms | 0.433 ms, 9.69x (7.88–9.84) | 0.058 ms, 1.10x (1.01–1.16) | 0.201 ms, 3.62x (3.27–4.22) | 0.264 ms, 5.21x (4.62–5.62) | 885 MHz |
+| `gelu_chain` | 2048x4096 (32 MB) | 0.226 ms | 2.32 ms, 10.23x (10.20–10.28) | 0.221 ms, 0.99x (0.99–0.99) | 0.386 ms, 1.68x (1.66–1.70) | 0.644 ms, 2.78x (2.78–2.79) | 1830 MHz |
+| `gelu_chain` | 8192x4096 (128 MB) | 0.863 ms | 8.95 ms, 10.31x (10.22–10.33) | 0.860 ms, 1.00x (1.00–1.06) | 1.09 ms, 1.25x (1.21–1.32) | 1.96 ms, 2.25x (2.23–2.31) | 1560 MHz |
+| `matmul_bias_relu` | 256x1024 @ 1024x1024 | 0.387 ms | 0.188 ms, 0.52x (0.52–0.54) | 0.167 ms, 0.44x (0.44–0.48) | 0.309 ms, 0.84x (0.83–0.86) | 0.361 ms, 0.98x (0.93–1.02) | 1260 MHz |
+| `matmul_bias_relu` | 2048x1024 @ 1024x1024 | 1.36 ms | 0.812 ms, 0.60x (0.60–0.60) | 0.766 ms, 0.57x (0.57–0.57) | 0.891 ms, 0.66x (0.66–0.66) | 0.997 ms, 0.74x (0.73–0.74) | 1410 MHz |
+| `mlp_block` | B=128, 512->2048->512 | 0.647 ms | 0.490 ms, 0.75x (0.73–0.81) | 0.283 ms, 0.44x (0.42–0.46) | 0.361 ms, 0.55x (0.51–0.60) | 0.400 ms, 0.62x (0.62–0.63) | 1620 MHz |
+| `mlp_block` | B=512, 512->2048->512 | 1.01 ms | 0.902 ms, 0.87x (0.86–0.91) | 0.472 ms, 0.45x (0.44–0.47) | 0.558 ms, 0.55x (0.55–0.56) | 0.648 ms, 0.64x (0.64–0.65) | 1567 MHz |
+| `mlp_block` | B=4096, 512->2048->512 | 6.20 ms | 6.63 ms, 1.07x (1.01–1.12) | 3.70 ms, 0.59x (0.59–0.60) | 3.72 ms, 0.59x (0.59–0.60) | 3.84 ms, 0.62x (0.61–0.63) | 1132 MHz |
+
+Ratios are PyTorch time / minicompiler time (above 1 means minicompiler is faster): within each of 3 runs, the median over interleaved rounds; shown as the median across runs with the range. All variants run in one process on one CUDA stream with their inputs on the device; each call is timed with CUDA events from before the call to the end of its last kernel, so host launch overhead counts. The timer's own floor (a call that launches nothing) was 5–6 µs. The SM clock column is the median sampled during each config: a laptop GPU stays near idle clocks when the calls are tiny. Measured on GPU: NVIDIA GeForce RTX 3060 Laptop GPU (30 SMs, compute capability 8.6); SM clock during the runs 210–2002 MHz (median 1507); CUDA runtime 13.0, driver API 13.1; PyTorch 2.14.1+cu130; PyTorch's CUDA 13.0; Triton 3.8.0; Windows power plan: Turbo; commit 3b6c819.
+<!-- END gpu-torch -->
+
+What this shows:
+
+- **Elementwise graphs:** one generated kernel per fused group puts
+  minicompiler level with PyTorch's own hand-written fused `F.gelu` from
+  32 MB up (0.99–1.00x) and about 10x ahead of running the graph op by op.
+  From 16 KB to 4 MB it is 1.10–1.41x ahead of `F.gelu`: one ctypes call
+  into C++ that launches one kernel costs less host time than PyTorch's
+  dispatch. `torch.compile` is 1.25–6.12x behind, and its kernel is not the
+  reason (see the profiles below).
+- **Matmul-heavy graphs:** PyTorch wins. Idiomatic PyTorch is 1.75–2.3x
+  faster on matmul + bias + ReLU and 1.7–2.3x faster on the MLP block,
+  because cuBLAS is 1.5–5.9x faster than minicompiler's matmul kernels at
+  these shapes. Against the op-by-op eager MLP block, which launches 22
+  kernels, minicompiler is at 0.75–1.07x.
+- **CUDA graphs** don't help these one-call latencies: `reduce-overhead`
+  copies every input into the graph's own buffer before replaying, which
+  costs as much as a bandwidth-bound kernel.
+
+### Where the time goes
+
+[Nsight Systems profiles](docs/profiling/gpu) of the same calls separate
+host time from kernel time:
+
+- At 32 MB, minicompiler's GELU kernel, PyTorch's `F.gelu` kernel and
+  Inductor's Triton kernel each take 214–215 µs, the time to stream 64 MB
+  through DRAM. A `torch.compile` call takes 378 µs against minicompiler's
+  250 µs: the gap is host-side overhead in the compiled function, not code
+  generation.
+- In the B=512 MLP block, minicompiler's matmuls take 315 µs and 496 µs where
+  cuBLAS takes 142–150 µs per layer. Its two fused elementwise kernels
+  (35 µs) are close to Inductor's two (30 µs) and far ahead of eager's 20
+  (about 450 µs).
+- At B=128, cuBLAS runs the long-K layer with `ampere_sgemm_64x32_sliced1x4`,
+  which splits K four ways inside each block: the split-K idea under
+  [What I'd do next](#what-id-do-next).
+
+Nsight Compute could not be used: GPU performance counters are restricted to
+administrators on this machine, so there is no per-kernel counter analysis.
+
+## Reproducing the GPU results on Colab
+
+[`notebooks/gpu_validation.ipynb`](notebooks/gpu_validation.ipynb)
+([open in Colab](https://colab.research.google.com/github/kartsen03/minicompiler/blob/main/notebooks/gpu_validation.ipynb))
+clones the repository at a pinned commit, builds it with the CUDA backend for
+the Colab GPU's compute capability, runs every test and fails if any GPU test
+is skipped, runs the three GPU benchmarks three times, writes
+`results/gpu/*.json` with the commit, GPU and CUDA versions, and shows the
+same tables as this README. Choose a T4 runtime, then Run all.
+
 ## Testing
 
 GoogleTest suites ([`tests/`](tests)) cover each component and each pass's
 behavior, compare every kernel against a double-precision reference with
 stated tolerances, and check on random graphs that optimized and unoptimized
 graphs agree. The random-graph generator tracks interval bounds so it only
-builds numerically meaningful graphs. CI builds and tests on Ubuntu with GCC,
-Clang, and GCC under AddressSanitizer and UndefinedBehaviorSanitizer.
+builds numerically meaningful graphs. There are 86 test cases in 20 suites
+without the CUDA backend and 99 in 21 with it; CTest also runs the example
+program.
+
+With the CUDA backend, more tests compare the GPU with the CPU backend: every
+unary and binary op (bit for bit where IEEE arithmetic requires it, within
+8 ulp for the transcendental functions), every broadcast pattern, all five
+matmul kernels on 11 shapes that straddle the tile sizes (within the
+dot-product error bound), the benchmark graphs fused and unfused, and 200
+random graphs. They skip when no GPU is present.
+
+CI builds and tests on Ubuntu with GCC, Clang, and GCC under AddressSanitizer
+and UndefinedBehaviorSanitizer, and builds the CUDA backend with CUDA 12.6
+and 13.4 in NVIDIA's containers. Those runners have no GPU, so there the GPU
+tests skip and everything else runs.
+
+## What I'd do next
+
+- **Split-K for small outputs with a long K.** The B=128 MLP's second layer
+  (128×2048×512) has 16 64×64 tiles for 30 SMs, so even the small tiles leave
+  half the GPU idle; splitting K across blocks and summing the partial
+  products would fill it. This is the largest gap to cuBLAS in the tables
+  above.
+- **Close more of the gap to cuBLAS on large matmuls**: double-buffered tile
+  loads (`cp.async` on Ampere) so loads overlap the FMAs, 128-bit
+  shared-memory loads, and warp-level tiling; then tensor cores (TF32 or BF16
+  via `mma.sync`), stating the accuracy change.
+- **Fuse epilogues into the matmul.** In the MLP block, bias, BatchNorm and
+  GELU follow a matmul as a separate fused kernel that reads the matmul's
+  output back from DRAM; applying them before the matmul kernel stores its
+  tile would remove that round trip.
+- **CUDA graphs** for small graphs, where launch overhead dominates: capture
+  the launch sequence once and replay it.
+- **Autotuning instead of a fixed rule**: time the candidate tile sizes for
+  each matmul shape at compile time. The three-quarters rule is calibrated on
+  one GPU.
+- **Hardware counters** with Nsight Compute, which needs GPU counter access
+  (off by default on this machine): achieved occupancy, DRAM throughput and
+  shared-memory bank conflicts per kernel.
+- **Reductions** (softmax, LayerNorm) and fusion across them, which is where
+  graph compilers find most of their gains on transformer blocks.
 
 ## Layout
 
 ```
-include/minicompiler/   public headers: IR, parser, passes, DOT export, runtime
-src/                    implementation; src/cpu/ is the Eigen backend
+include/minicompiler/   public headers: IR, parser, passes, DOT export, runtime, CUDA backend
+src/                    implementation; src/cpu/ is the Eigen backend, src/cuda/ the CUDA one
 tools/mcc.cpp           command-line driver
 tests/                  GoogleTest suites
-bench/                  benchmark graphs (.mcg), CPU benchmark, PyTorch harness
-scripts/                diagram rendering, profiling, benchmark recording
-docs/                   IR diagrams and profiling results
-results/                recorded benchmark results (JSON)
+bench/                  benchmark graphs (.mcg), CPU and GPU benchmarks, PyTorch harness
+scripts/                diagram rendering, profiling, benchmark recording, result tables
+notebooks/              Colab notebook that rebuilds and re-measures the GPU results
+docs/                   IR diagrams, profiling results, claims audit
+results/                recorded benchmark results (JSON), raw runs included
 ```
 
 ## License
